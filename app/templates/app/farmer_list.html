@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CRPAS - Farmers</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        a { color: #0066cc; }
+    </style>
+</head>
+<body>
+    <h1>Climate-Resilient Planting Advisory System</h1>
+    <h2>Registered Farmers</h2>
+    <table>
+        <tr><th>Name</th><th>Phone</th><th>Crop</th><th>Location</th><th>Detail</th></tr>
+        {% for farmer in farmers %}
+        <tr>
+            <td>{{ farmer.fname }} {{ farmer.lname }}</td>
+            <td>{{ farmer.phone }}</td>
+            <td>{{ farmer.get_crop_type_display }}</td>
+            <td>{{ farmer.lat }}, {{ farmer.long }}</td>
+            <td><a href="{% url 'farmer_detail' farmer.pk %}">View Advisory</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No farmers registered yet.</td></tr>
+        {% endfor %}
+    </table>
+    <p><a href="{% url 'admin:index' %}">Admin: Add/Edit Farmers</a></p>
+</body>
+</html>

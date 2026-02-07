@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+*.egg-info/
+dist/
+build/
+
+# Django
+*.sqlite3
+*.db
+/db.sqlite3
+/staticfiles/
+/media/
+.env.local
+.env.*.local
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.sublime-project
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+.windows-build-tools
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Documentation and development files
+README.md
+CHANGELOG.md
+.editorconfig
+.eslintrc*
+.prettierrc*
+
+# Node modules (if using frontend tools)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Miscellaneous
+*.bak
+*.tmp
+.env.example

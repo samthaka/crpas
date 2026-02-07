@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: crpas_app
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      # Mount the entire project for development
+      - .:/app
+      # Mount data directory for SQLite database persistence
+      - crpas_data:/app/data
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    networks:
+      - crpas_network
+
+  # Optional: Database management tool for SQLite (if needed)
+  # You can access SQLite database through the web container
+
+volumes:
+  crpas_data:
+    driver: local
+
+networks:
+  crpas_network:
+    driver: bridge
