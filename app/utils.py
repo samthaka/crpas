@@ -69,28 +69,52 @@ def generate_advisory(farmer, forecast_data, soil_data):
     forecast_str = "\n".join([f"{day['date']}: {day['rain_mm']}mm rain (prob {day['prob_max']}%), temp {day['temp_min']}-{day['temp_max']}°C" for day in forecast_data[:10]])
 
     prompt = f"""
-You are an expert Kenyan agronomist for smallholder farmers.
-Farmer: {farmer.fname} {farmer.lname}, growing {crop} at coordinates {farmer.lat}, {farmer.long}.
+You are an expert Kenyan agronomist advising smallholder farmers using local climate logic.
+Your goal is to reduce false-start planting risk.
 
-Current soil: top moisture {soil_data.get('soil_moisture_top', 'N/A')} m³/m³, mid {soil_data.get('soil_moisture_mid', 'N/A')}, deep {soil_data.get('soil_moisture_deep', 'N/A')}, surface temp {soil_data.get('soil_temp_surface', 'N/A')}°C.
+Farmer: {farmer.fname} {farmer.lname}
+Location: {farmer.lat}, {farmer.long}
+Crop: {crop}
 
-Forecast (next 10 days):
+CURRENT SOIL CONDITIONS:
+- Top soil moisture: {soil_data.get('soil_moisture_top', 'N/A')} m³/m³
+- Mid soil moisture: {soil_data.get('soil_moisture_mid', 'N/A')} m³/m³
+- Deep soil moisture: {soil_data.get('soil_moisture_deep', 'N/A')} m³/m³
+- Surface soil temperature: {soil_data.get('soil_temp_surface', 'N/A')} °C
+
+RAINFALL & WEATHER FORECAST (next 10 days):
 {forecast_str}
 
-For {crop}:
-- Maize: Needs consistent moisture first 30 days post-planting to avoid failure.
-- Beans: More tolerant but still vulnerable to false starts.
+AGRONOMIC RULES (Kenyan conditions):
 
-Analyze:
-1. False start risk (short rain → dry).
-2. Best planting window (next 10-14 days) with sustained rain/moisture alignment.
-3. If no good window, say so clearly.
-4. Add alerts (pests, fungi if wet-dry cycles).
+Maize:
+- Needs at least 20-30 mm cumulative rain over 5-7 days to plant safely
+- High failure risk if >7 dry days occur after first rain
+- Very sensitive in first 30 days after planting
+- Early rains increase fall armyworm risk
 
-Output ONLY a friendly SMS-style message:
-Start with: "Habari [fname]! Ushauri wa Kupanda wa CRPAS:"
-Then the advice, dates, risks.
-Keep under 300 characters if possible, simple English (add Kiswahili if helpful).
+Beans:
+- Can plant with 15-20 mm over ~5 days
+- More tolerant to short dry spells
+- Wet-dry cycles increase fungal disease risk
+
+ANALYZE STEP-BY-STEP:
+1. Identify if upcoming rains are a FALSE START (rain followed by long dry spell).
+2. Check if rainfall + soil moisture align to support germination.
+3. Determine the BEST planting window in the next 10-14 days.
+4. If conditions are risky, clearly advise to WAIT.
+5. Add simple risk alerts (pests or disease) only if relevant.
+
+OUTPUT RULES:
+- Output ONLY one SMS-style message
+- Start exactly with:
+  "Habari {farmer.fname}! Ushauri wa Kupanda wa CRPAS:"
+- Use simple English with light simple Kiswahili if helpful
+- Mention specific dates or date ranges
+- Be clear and decisive (Plant / Wait and When to plant)
+- Keep an open tone, avoid technical jargon, and be encouraging
+- Keep under 500 characters if possible
+- Do NOT explain your reasoning
 """
 
     try:

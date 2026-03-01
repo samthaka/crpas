@@ -119,8 +119,24 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static/'),
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# Custom User Model
+AUTH_USER_MODEL = 'app.CustomUser'
+
+# Custom Authentication Backend
+AUTHENTICATION_BACKENDS = [
+    'app.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
+]
+
+# Login/Logout settings
+LOGIN_URL = 'auth'
+LOGIN_REDIRECT_URL = 'dashboard'
+LOGOUT_REDIRECT_URL = 'auth'
