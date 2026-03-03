@@ -136,3 +136,15 @@ class Farmer(models.Model):
         verbose_name = "Farmer"
         verbose_name_plural = "Farmers"
         ordering = ['-created_at']
+
+
+class ChatThread(models.Model):
+    """A conversation thread for a specific farmer."""
+    farmer = models.ForeignKey(Farmer, related_name='chat_threads', on_delete=models.CASCADE)
+    title = models.CharField(max_length=200, blank=True, default='New chat')
+    history = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"ChatThread for {self.farmer} ({self.created_at:%Y-%m-%d %H:%M})"

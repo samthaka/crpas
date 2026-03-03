@@ -529,3 +529,32 @@ body{
         opacity: 1;
     }
 }
+
+/* =========================
+   Global improvements
+   ========================= */
+
+body, html {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.container {
+    max-width: 960px;
+}
+
+.card {
+    border-radius: 10px;
+}
+
+.btn-success {
+    background-color: #008d4c;
+    border-color: #008d4c;
+}
+
+.form-control:focus {
+    box-shadow: 0 0 5px rgba(0, 125, 0, 0.5);
+}

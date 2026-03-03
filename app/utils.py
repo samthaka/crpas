@@ -1,7 +1,44 @@
+import logging
 import requests
 from groq import Groq
 from django.conf import settings
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+def generate_chat_title(user_message):
+    """
+    Generate a concise title/summary of the first user message using Groq.
+    Returns a short, meaningful title (3-7 words) for organizing chats.
+    """
+    client = Groq(api_key=settings.GROQ_API_KEY)
+    
+    prompt = f"""Given this farming question from a farmer, generate a very short title (3-7 words max) that summarizes what they're asking about. 
+Only output the title, nothing else.
+
+Question: {user_message}
+
+Title:"""
+    
+    try:
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            max_tokens=20,
+        )
+        
+        title = response.choices[0].message.content.strip()
+        # Ensure title is not too long
+        if len(title) > 50:
+            title = title[:50].strip() + "..."
+        return title if title else "New chat"
+    except Exception as e:
+        logger.warning(f"Failed to generate title: {str(e)}")
+        # Fallback to first 40 chars if API fails
+        return user_message[:40].strip() + "..." if len(user_message) > 40 else user_message
 
 def get_rainfall_forecast(lat, lon, days=10):
     """Fetch 10-day rainfall forecast from Open-Meteo (free, no key)"""
@@ -118,11 +155,13 @@ OUTPUT RULES:
 """
 
     try:
+        messages_payload = [
+            {"role": "system", "content": "You are a helpful Kenyan farming advisor."},
+            {"role": "user", "content": prompt},
+        ]
+        logger.debug(f"Sending advisory prompt to Groq API: {messages_payload}")
         chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": "You are a helpful Kenyan farming advisor."},
-                {"role": "user", "content": prompt},
-            ],
+            messages=messages_payload,
             model="llama-3.3-70b-versatile",
             temperature=0.7,
             max_tokens=400,
@@ -132,7 +171,8 @@ OUTPUT RULES:
         # Optional: Save to history (adapt format)
         new_entry = [
             {"role": "user", "content": prompt},
-            {"role": "model", "content": advisory}
+            # Groq/chat API uses 'assistant' for model responses
+            {"role": "assistant", "content": advisory}
         ]
         farmer.gemini_chat_history.extend(new_entry)  # Reuse field name or rename later
         farmer.save()
@@ -140,3 +180,92 @@ OUTPUT RULES:
         return advisory
     except Exception as e:
         return f"Error generating advisory: {str(e)}"
+
+
+def chat_with_advisor(farmer, chat_thread, user_message):
+    """
+    Handle conversational chat with the advisor about farming topics.
+    Uses Groq to maintain context across multiple messages in the current chat thread.
+    Only sends the system prompt + messages from the current chat thread to avoid context bloat.
+    """
+    client = Groq(api_key=settings.GROQ_API_KEY)
+    
+    crop = "maize" if farmer.crop_type == 'maize' else "beans" if farmer.crop_type == 'beans' else "maize and beans (intercropped)"
+    
+    # Build system prompt with farmer context
+    system_prompt = f"""You are a friendly and knowledgeable Kenyan agricultural advisor helping farmers improve their farming practices.
+
+Farmer Profile:
+- Name: {farmer.fname} {farmer.lname}
+- Location: {farmer.lat}, {farmer.long}
+- Primary Crops: {crop}
+- Sub-county: {farmer.sub_county}
+- Ward: {farmer.ward}
+
+Your role is to provide practical, localized farming advice about:
+1. Crop selection and suitability for their location
+2. Planting and harvesting times
+3. Pest and disease management (especially for maize and beans)
+4. Soil health and water management
+5. Yield improvement techniques
+6. Post-harvest handling
+
+Guidelines:
+- Keep responses friendly and in simple language (English or light Kiswahili mix is fine)
+- Give practical, actionable advice that smallholder farmers can implement
+- Consider Kenya's climate and local farming practices
+- Be encouraging and supportive
+- If uncertain, suggest they check with local agricultural extension officers
+- Keep responses concise and focused on the question asked"""
+
+    # Get only the conversation history from this specific chat thread
+    conversation_history = [msg.copy() for msg in (chat_thread.history or [])]
+
+    # sanitize any legacy or invalid roles before sending to API
+    allowed_roles = {'system', 'user', 'assistant'}
+    for msg in conversation_history:
+        role = msg.get('role')
+        if role == 'model':
+            msg['role'] = 'assistant'
+            role = 'assistant'
+        if role not in allowed_roles:
+            logger.warning(f"Unexpected role '{role}' found in history; converting to 'assistant'.")
+            msg['role'] = 'assistant'
+
+    conversation_history.append({
+        "role": "user",
+        "content": user_message
+    })
+    
+    # Update chat thread title if this is the first message
+    if not chat_thread.history or len(chat_thread.history) == 0:
+        # Generate a smart title from the first message
+        chat_thread.title = generate_chat_title(user_message)
+    
+    # Prepare messages for API (add system message first, then only current chat history)
+    api_messages = [{"role": "system", "content": system_prompt}] + conversation_history
+    
+    try:
+        # debug: log message sequence before request
+        logger.debug(f"Sending messages to Groq API for chat thread {chat_thread.id}: {len(api_messages)} messages")
+        chat_completion = client.chat.completions.create(
+            messages=api_messages,
+            model="llama-3.3-70b-versatile",
+            temperature=0.7,
+            max_tokens=500,
+        )
+        
+        advisor_response = chat_completion.choices[0].message.content.strip()
+        
+        # Save the exchange to the current chat thread's history (not farmer history)
+        conversation_history.append({
+            "role": "assistant",
+            "content": advisor_response
+        })
+        chat_thread.history = conversation_history
+        chat_thread.save()
+        
+        return advisor_response
+    
+    except Exception as e:
+        return f"Sorry, I encountered an error processing your message: {str(e)}"
