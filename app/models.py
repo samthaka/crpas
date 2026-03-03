@@ -87,6 +87,13 @@ class Farmer(models.Model):
         verbose_name="Longitude",
         help_text="Field location longitude - auto-captured from device GPS"
     )
+    county = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="County",
+        help_text="County extracted from GPS coordinates using reverse geocoding"
+    )
     sub_county = models.CharField(
         max_length=100,
         verbose_name="Sub-County",

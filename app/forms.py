@@ -125,7 +125,7 @@ class FarmerRegistrationForm(forms.ModelForm):
     """
     class Meta:
         model = Farmer
-        fields = ['fname', 'lname', 'phone', 'email', 'sub_county', 'ward', 'lat', 'long', 'gps_accuracy', 'crop_type']
+        fields = ['fname', 'lname', 'phone', 'email', 'county', 'sub_county', 'ward', 'lat', 'long', 'crop_type']
         widgets = {
             'fname': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -147,6 +147,12 @@ class FarmerRegistrationForm(forms.ModelForm):
                 'placeholder': 'your.email@example.com',
                 'required': False
             }),
+            'county': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'County will be auto-detected from GPS',
+                'required': False,
+                'readonly': True
+            }),
             'sub_county': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'e.g., Kasipul, Muhoroni',
@@ -158,25 +164,19 @@ class FarmerRegistrationForm(forms.ModelForm):
                 'required': True
             }),
             'lat': forms.NumberInput(attrs={
-                'class': 'form-control',
+                'type': 'hidden',
                 'id': 'lat-field',
                 'step': 'any',
                 'required': False,
-                'readonly': True
             }),
             'long': forms.NumberInput(attrs={
-                'class': 'form-control',
+                'type': 'hidden',
                 'id': 'long-field',
                 'step': 'any',
                 'required': False,
-                'readonly': True
             }),
-            'gps_accuracy': forms.NumberInput(attrs={
+            'crop_type': forms.Select(attrs={
                 'class': 'form-control',
-                'id': 'gps-accuracy-field',
-                'step': 'any',
-                'required': False,
-                'readonly': True,
                 'required': True
             })
         }

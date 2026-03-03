@@ -113,55 +113,40 @@ CRPAS{% endblock %} {% block content %}
               device's GPS location...
             </div>
 
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label for="lat-field" class="form-label"> Latitude </label>
-                {{ form.lat }}
-                <small class="form-text text-muted d-block mt-1"
-                  >Auto-captured from device GPS</small
-                >
-                {% if form.lat.errors %}
-                <div class="text-danger mt-1" style="font-size: 0.85rem">
-                  {{ form.lat.errors }}
-                </div>
-                {% endif %}
-              </div>
-
-              <div class="col-md-6 mb-3">
-                <label for="long-field" class="form-label"> Longitude </label>
-                {{ form.long }}
-                <small class="form-text text-muted d-block mt-1"
-                  >Auto-captured from device GPS</small
-                >
-                {% if form.long.errors %}
-                <div class="text-danger mt-1" style="font-size: 0.85rem">
-                  {{ form.long.errors }}
-                </div>
-                {% endif %}
-              </div>
-            </div>
-
-            <div class="mb-3">
-              <label for="gps-accuracy-field" class="form-label">
-                GPS Accuracy
-              </label>
-              {{ form.gps_accuracy }}
-              <small class="form-text text-muted d-block mt-1"
-                >Accuracy of GPS reading in meters (lower is better)</small
-              >
+            <!-- GPS Fields (Hidden but still submitted) -->
+            <div style="display: none;">
+              {{ form.lat }}
+              {{ form.long }}
             </div>
 
             <!-- Administrative Location Section -->
             <div class="section-title mt-4 mb-3">
-              <h5 class="form-section-title">Administrative Location</h5>
+              <h5 class="form-section-title">Location Information</h5>
               <small class="text-muted"
-                >Provide your sub-county and ward for location
-                verification</small
+                >Your farm location will be auto-detected from GPS coordinates</small
               >
             </div>
 
             <div class="row">
-              <div class="col-md-6 mb-3">
+              <div class="col-md-4 mb-3">
+                <label
+                  for="{{ form.county.id_for_label }}"
+                  class="form-label"
+                >
+                  County
+                </label>
+                {{ form.county }}
+                <small class="form-text text-muted d-block mt-1"
+                  >Auto-filled from GPS location</small
+                >
+                {% if form.county.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.county.errors }}
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-4 mb-3">
                 <label
                   for="{{ form.sub_county.id_for_label }}"
                   class="form-label"
@@ -170,7 +155,7 @@ CRPAS{% endblock %} {% block content %}
                 </label>
                 {{ form.sub_county }}
                 <small class="form-text text-muted d-block mt-1"
-                  >e.g., Kasipul, Muhoroni, Kisumu East</small
+                  >e.g., Kasipul, Muhoroni</small
                 >
                 {% if form.sub_county.errors %}
                 <div class="text-danger mt-1" style="font-size: 0.85rem">
@@ -179,13 +164,13 @@ CRPAS{% endblock %} {% block content %}
                 {% endif %}
               </div>
 
-              <div class="col-md-6 mb-3">
+              <div class="col-md-4 mb-3">
                 <label for="{{ form.ward.id_for_label }}" class="form-label">
                   Ward <span class="text-danger">*</span>
                 </label>
                 {{ form.ward }}
                 <small class="form-text text-muted d-block mt-1"
-                  >e.g., Kabar, Chemase, North Nyakach</small
+                  >e.g., Kabar, Chemase</small
                 >
                 {% if form.ward.errors %}
                 <div class="text-danger mt-1" style="font-size: 0.85rem">
@@ -352,7 +337,11 @@ CRPAS{% endblock %} {% block content %}
     const gpsStatus = document.getElementById("gpsStatus");
     const latField = document.getElementById("lat-field");
     const longField = document.getElementById("long-field");
-    const accuracyField = document.getElementById("gps-accuracy-field");
+
+    if (!gpsStatus || !latField || !longField) {
+      console.warn("GPS form fields not found");
+      return;
+    }
 
     if (navigator.geolocation) {
       const options = {
@@ -365,20 +354,72 @@ CRPAS{% endblock %} {% block content %}
         function (position) {
           const latitude = position.coords.latitude;
           const longitude = position.coords.longitude;
-          const accuracy = position.coords.accuracy;
 
           // Set form field values
           latField.value = latitude.toFixed(6);
           longField.value = longitude.toFixed(6);
-          accuracyField.value = accuracy.toFixed(2);
 
-          // Update status
+          // Update status - show that we're geocoding
           gpsStatus.innerHTML =
-            '<i class="fas fa-check-circle text-success"></i> GPS location captured successfully!';
-          gpsStatus.className = "alert alert-success";
+            '<i class="fas fa-spinner fa-spin"></i> GPS location captured! Auto-filling location information...';
+          gpsStatus.className = "alert alert-info";
 
-          // Check distance between GPS and admin location
-          checkLocationConsistency();
+          // Call reverse geocoding API
+          fetch('{% url "reverse_geocode_api" %}?lat=' + latitude + '&lon=' + longitude)
+            .then(response => response.json())
+            .then(data => {
+              console.log('Geocoding API response:', data);
+              if (data.status === 'success') {
+                // Auto-fill the location fields
+                const countyField = document.querySelector('[name="county"]');
+                const subCountyField = document.querySelector('[name="sub_county"]');
+                const wardField = document.querySelector('[name="ward"]');
+
+                console.log('Form fields found:', {
+                  countyField: !!countyField,
+                  subCountyField: !!subCountyField,
+                  wardField: !!wardField
+                });
+                console.log('API data:', data.data);
+
+                if (data.data.county && countyField) {
+                  countyField.value = data.data.county;
+                  console.log('Set county to:', data.data.county);
+                }
+                if (data.data.sub_county && subCountyField) {
+                  subCountyField.value = data.data.sub_county;
+                  console.log('Set sub_county to:', data.data.sub_county);
+                }
+                if (data.data.ward && wardField) {
+                  wardField.value = data.data.ward;
+                  console.log('Set ward to:', data.data.ward);
+                } else {
+                  console.warn('Ward not found or empty:', 'ward' in data.data, data.data.ward);
+                }
+
+                // Success message
+                gpsStatus.innerHTML =
+                  '<i class="fas fa-check-circle text-success"></i> Perfect! Your location has been detected and auto-filled. County: <strong>' +
+                  (data.data.county || 'N/A') +
+                  '</strong>, Sub-County: <strong>' +
+                  (data.data.sub_county || 'N/A') +
+                  '</strong>, Ward: <strong>' +
+                  (data.data.ward || 'N/A') +
+                  '</strong>';
+                gpsStatus.className = "alert alert-success";
+              } else {
+                // Geocoding failed - show warning
+                gpsStatus.innerHTML =
+                  '<i class="fas fa-exclamation-circle text-warning"></i> GPS location captured, but could not auto-fill location. Please enter your Sub-County and Ward manually below.';
+                gpsStatus.className = "alert alert-warning";
+              }
+            })
+            .catch(error => {
+              console.error('Geocoding error:', error);
+              gpsStatus.innerHTML =
+                '<i class="fas fa-exclamation-circle text-warning"></i> GPS location captured, but auto-fill encountered an error. Please enter your Sub-County and Ward manually below.';
+              gpsStatus.className = "alert alert-warning";
+            });
         },
         function (error) {
           let errorMessage = "";
@@ -401,49 +442,17 @@ CRPAS{% endblock %} {% block content %}
           gpsStatus.innerHTML =
             '<i class="fas fa-exclamation-circle text-warning"></i> ' +
             errorMessage +
-            " You can manually verify your location using the administrative fields below.";
+            " You can manually fill in your Sub-County and Ward below.";
           gpsStatus.className = "alert alert-warning";
         },
         options,
       );
     } else {
       gpsStatus.innerHTML =
-        '<i class="fas fa-times-circle text-danger"></i> Geolocation is not supported by your browser. You can still register by providing your administrative location (Sub-County/Ward).';
+        '<i class="fas fa-times-circle text-danger"></i> Geolocation is not supported by your browser. You can still register by providing your Sub-County and Ward below.';
       gpsStatus.className = "alert alert-danger";
     }
   }
 
-  function checkLocationConsistency() {
-    // This function can be expanded to check if GPS coordinates and admin location match
-    // For now, we'll show the warning if coordinates seem inconsistent with admin location
-    const subCountyField = document.querySelector('[name="sub_county"]');
-    const locationWarning = document.getElementById("locationWarning");
-
-    // We can add more sophisticated logic here to validate coordinates against known regions
-    // For now, this is a placeholder for future enhancement
-
-    subCountyField.addEventListener("change", function () {
-      validateLocationMatch();
-    });
-
-    const wardField = document.querySelector('[name="ward"]');
-    wardField.addEventListener("change", function () {
-      validateLocationMatch();
-    });
-  }
-
-  function validateLocationMatch() {
-    // Placeholder for location validation logic
-    // In the future, this could check if GPS coordinates match the sub-county/ward
-    // For now, we'll show the warning as a reminder to verify location
-    const latField = document.getElementById("lat-field");
-    const longField = document.getElementById("long-field");
-    const subCountyField = document.querySelector('[name="sub_county"]');
-
-    if (latField.value && longField.value && subCountyField.value) {
-      // You can add distance calculation here
-      // For now, we show the warning as a precaution
-    }
-  }
 </script>
 {% endblock %}

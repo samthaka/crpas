@@ -31,6 +31,14 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS').split(',')
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
+# CSRF Settings - Ensure proper CSRF token validation
+CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_HTTPONLY = False  # Must be False for JavaScript access to CSRF token
+CSRF_COOKIE_SAMESITE = 'Lax'  # Allow CSRF token to be sent with same-site requests
+# Build CSRF_TRUSTED_ORIGINS with proper schemes
+_allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+CSRF_TRUSTED_ORIGINS = [f'http://{host.strip()}' for host in _allowed_hosts]
+
 # Application definition
 
 INSTALLED_APPS = [

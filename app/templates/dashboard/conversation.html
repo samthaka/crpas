@@ -27,11 +27,13 @@
                         <small class="text-muted d-block mb-2">
                             <i class='bx bx-leaf'></i> {{ farmer.get_crop_type_display }}
                         </small>
+                        {% if farmer.county %}
                         <small class="text-muted d-block mb-2">
-                            <i class='bx bx-map'></i> {{ farmer.sub_county }}, {{ farmer.ward }}
+                            <i class='bx bx-map'></i> {{ farmer.county }} County
                         </small>
-                        <small class="text-muted d-block">
-                            <i class='bx bx-map-pin'></i> {{ farmer.lat }}, {{ farmer.long }}
+                        {% endif %}
+                        <small class="text-muted d-block mb-2">
+                            <i class='bx bx-map-pin'></i> {{ farmer.sub_county }}, {{ farmer.ward }}
                         </small>
                     </div>
                 </div>

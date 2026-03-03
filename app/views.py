@@ -16,6 +16,12 @@ CustomUser = get_user_model()
 def dashboard(request):
     return render(request, 'dashboard/dashboard.html')
 
+def index_redirect(request):
+    """
+    Redirect the root URL (/) to /dashboard/.
+    """
+    return redirect('dashboard')
+
 def auth_view(request):
     """
     Handles both login and sign-up using email and password.
@@ -87,9 +93,9 @@ def auth_view(request):
                     if user is not None:
                         logger.info(f"✓ Authentication successful for {user.email}")
                         login(request, user)
-                        messages.success(request, "Account created successfully! Welcome to CRPAS!")
-                        logger.info("Redirecting to dashboard")
-                        return redirect('dashboard')
+                        messages.success(request, "Account created successfully! Now let's set up your farm profile.")
+                        logger.info("Redirecting to farmer registration")
+                        return redirect('farmer_registration')
                     else:
                         logger.error(f"✗ Authentication failed for {email}")
                         messages.error(request, "Account created but automatic login failed. Please log in with your credentials.")
@@ -111,27 +117,90 @@ def logout_view(request):
     return redirect('auth')
 
 @login_required(login_url='auth')
+@login_required(login_url='auth')
 def farmer_registration(request):
     """
     Handle farmer registration where users add plot and contact information.
+    Prefills email from request.user.
+    Auto-fills county, sub_county, and ward from GPS coordinates using reverse geocoding.
     """
-    # Check if farmer already has a profile
-    try:
-        farmer = Farmer.objects.get(phone=request.POST.get('phone') if request.method == 'POST' else None)
-    except Farmer.DoesNotExist:
-        farmer = None
+    from .utils import reverse_geocode_coordinates
+    
+    # Check if farmer already has a profile linked to the logged-in user's email
+    # Use filter().first() to avoid MultipleObjectsReturned if multiple farmers exist with same email
+    farmer = Farmer.objects.filter(email=request.user.email).first() if request.user.is_authenticated else None
     
     if request.method == 'POST':
-        form = FarmerRegistrationForm(request.POST, instance=farmer)
+        # Try to reverse geocode the coordinates if both are provided
+        lat = request.POST.get('lat')
+        lon = request.POST.get('long')
+        
+        post_data = request.POST.copy()
+        
+        if lat and lon:
+            try:
+                lat = float(lat)
+                lon = float(lon)
+                geocoded = reverse_geocode_coordinates(lat, lon)
+                
+                if geocoded:
+                    # Auto-fill the administrative divisions from geocoding
+                    if geocoded.get('county') and not post_data.get('county'):
+                        post_data['county'] = geocoded['county']
+                    if geocoded.get('sub_county') and not post_data.get('sub_county'):
+                        post_data['sub_county'] = geocoded['sub_county']
+                    if geocoded.get('ward') and not post_data.get('ward'):
+                        post_data['ward'] = geocoded['ward']
+                    
+                    logger.info(f"Reverse geocoded ({lat}, {lon}) → {geocoded}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse GPS coordinates: {str(e)}")
+        
+        form = FarmerRegistrationForm(post_data, instance=farmer)
         if form.is_valid():
             farmer = form.save()
             messages.success(request, "Your farm details have been saved successfully!")
             return redirect('dashboard')
     else:
-        form = FarmerRegistrationForm()
+        # Prefill the form with logged-in user's email
+        initial_data = {
+            'email': request.user.email,
+        }
+        form = FarmerRegistrationForm(initial=initial_data)
     
     return render(request, 'registration.html', {'form': form})
 
+
+def reverse_geocode_api(request):
+    """
+    AJAX endpoint to reverse geocode GPS coordinates.
+    Accepts GET parameters: lat and lon
+    Returns JSON with county, sub_county, and ward
+    """
+    from .utils import reverse_geocode_coordinates
+    
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET requests allowed'}, status=400)
+    
+    try:
+        lat = float(request.GET.get('lat', ''))
+        lon = float(request.GET.get('lon', ''))
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid latitude or longitude'}, status=400)
+    
+    # Call the reverse geocoding function
+    result = reverse_geocode_coordinates(lat, lon)
+    
+    if result:
+        return JsonResponse({
+            'status': 'success',
+            'data': result
+        })
+    else:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Could not geocode coordinates. Please enter location manually.'
+        }, status=400)
 
 # @login_required(login_url='auth')
 def conversation_view(request):

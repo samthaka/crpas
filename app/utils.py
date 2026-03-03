@@ -1,16 +1,128 @@
 import logging
 import requests
-from groq import Groq
 from django.conf import settings
 from datetime import datetime, timedelta
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Try to import Groq (may not be installed in all environments)
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    logger.warning("Groq module not installed - chat features will not work")
+
+def reverse_geocode_coordinates(lat, lon):
+    """
+    Reverse geocode GPS coordinates to extract Kenya administrative divisions.
+    Uses Nominatim (OpenStreetMap) - free API, no key required.
+    
+    Returns a dict with:
+    {
+        'county': 'County Name',
+        'sub_county': 'Sub-County Name',
+        'ward': 'Ward Name'
+    }
+    
+    Returns None if geocoding fails.
+    """
+    if not lat or not lon:
+        return None
+    
+    try:
+        # Nominatim API endpoint for reverse geocoding
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'format': 'json',
+            'lat': lat,
+            'lon': lon,
+            'zoom': 18,  # Detailed address
+            'accept-language': 'en'
+        }
+        
+        # Add User-Agent as required by Nominatim
+        headers = {
+            'User-Agent': 'CRPAS-AgriculturalAdvisor/1.0'
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data:
+            return None
+        
+        address = data.get('address', {})
+        
+        # Extract Kenya administrative divisions from OSM address tags
+        # Nominatim uses different field names depending on the area:
+        # Rural areas: state (county), county (sub-county), town/village/hamlet (ward)
+        # Urban areas: state (region), city_district (sub-county), suburb (ward)
+        
+        # Extract County
+        county = address.get('state')
+        if county and not county.endswith(' County'):
+            county = f"{county} County"
+        
+        # Extract Sub-County - try different field names
+        sub_county = (address.get('county') or 
+                     address.get('city_district') or
+                     address.get('municipality'))
+        
+        # Extract Ward - try multiple field names
+        ward = (address.get('town') or 
+                address.get('village') or 
+                address.get('hamlet') or 
+                address.get('suburb') or
+                address.get('neighbourhood') or
+                address.get('locality') or
+                address.get('district'))
+        
+        # Log what we're getting for debugging
+        logger.debug(f"Full address from Nominatim: {address}")
+        logger.debug(f"Extracted: county={county}, sub_county={sub_county}, ward={ward}")
+        
+        # Build result
+        result = {}
+        if county:
+            result['county'] = county
+            logger.info(f"Reverse geocoded county: {county}")
+        if sub_county:
+            result['sub_county'] = sub_county
+            logger.info(f"Reverse geocoded sub-county: {sub_county}")
+        if ward:
+            result['ward'] = ward
+            logger.info(f"Reverse geocoded ward: {ward}")
+        
+        if result:
+            logger.info(f"Reverse geocoded ({lat}, {lon}) → {result}")
+            return result
+        else:
+            logger.warning(f"Could not extract admin divisions from geocoding response: {address}")
+            return None
+            
+    except requests.exceptions.Timeout:
+        logger.error(f"Nominatim API timeout for ({lat}, {lon})")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Nominatim API error for ({lat}, {lon}): {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Reverse geocoding error for ({lat}, {lon}): {str(e)}")
+        return None
 
 def generate_chat_title(user_message):
     """
     Generate a concise title/summary of the first user message using Groq.
     Returns a short, meaningful title (3-7 words) for organizing chats.
+    Falls back to truncated message if Groq is not available.
     """
+    if not GROQ_AVAILABLE:
+        # Fallback: use first 40 characters of message
+        return user_message[:40].strip() + "..." if len(user_message) > 40 else user_message
+    
     client = Groq(api_key=settings.GROQ_API_KEY)
     
     prompt = f"""Given this farming question from a farmer, generate a very short title (3-7 words max) that summarizes what they're asking about. 
@@ -188,6 +300,9 @@ def chat_with_advisor(farmer, chat_thread, user_message):
     Uses Groq to maintain context across multiple messages in the current chat thread.
     Only sends the system prompt + messages from the current chat thread to avoid context bloat.
     """
+    if not GROQ_AVAILABLE:
+        return "Sorry, the chat advisor is currently unavailable. Please ensure the Groq API is properly configured."
+    
     client = Groq(api_key=settings.GROQ_API_KEY)
     
     crop = "maize" if farmer.crop_type == 'maize' else "beans" if farmer.crop_type == 'beans' else "maize and beans (intercropped)"
