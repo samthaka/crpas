@@ -1,0 +1,606 @@
+{% extends 'base.html' %} {% load static %} {% block title %}Farm Registration -
+CRPAS{% endblock %} {% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card shadow">
+        <div
+          class="card-header text-white"
+          style="background-color: rgb(0, 119, 26)"
+        >
+          <h3 class="mb-0">Farm Registration</h3>
+          <p class="mb-0 mt-2" style="font-size: 0.9rem">
+            Please provide your details and farm location
+          </p>
+        </div>
+        <div class="card-body">
+          {% if messages %} {% for message in messages %}
+          <div
+            class="alert alert-{{ message.tags }} alert-dismissible fade show"
+            role="alert"
+          >
+            {{ message }}
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="alert"
+              aria-label="Close"
+            ></button>
+          </div>
+          {% endfor %} {% endif %}
+
+          <form method="POST" class="needs-validation" id="farmerForm">
+            {% csrf_token %}
+
+            <!-- Personal Information Section -->
+            <div class="section-title mt-4 mb-3">
+              <h5 class="form-section-title">Personal Information</h5>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.fname.id_for_label }}" class="form-label">
+                  First Name <span class="text-danger">*</span>
+                </label>
+                {{ form.fname }} {% if form.fname.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.fname.errors }}
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.lname.id_for_label }}" class="form-label">
+                  Last Name <span class="text-danger">*</span>
+                </label>
+                {{ form.lname }} {% if form.lname.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.lname.errors }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Contact Information Section -->
+            <div class="section-title mt-4 mb-3">
+              <h5 class="form-section-title">Contact Information</h5>
+              <small class="text-muted"
+                >Please provide at least one contact method (phone or
+                email)</small
+              >
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.phone.id_for_label }}" class="form-label">
+                  Phone Number
+                </label>
+                {{ form.phone }}
+                <small class="form-text text-muted d-block mt-1"
+                  >Format: +254712345678 or 0712345678</small
+                >
+                {% if form.phone.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.phone.errors }}
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.email.id_for_label }}" class="form-label">
+                  Email Address
+                </label>
+                {{ form.email }} {% if form.email.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.email.errors }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Farm Location Section - Automatic GPS Capture -->
+            <div class="section-title mt-4 mb-3">
+              <h5 class="form-section-title">Farm Location - GPS Detection</h5>
+              <small class="text-muted"
+                >We'll automatically detect your device's GPS location. Please
+                make sure you're at your farm location when registering.</small
+              >
+            </div>
+
+            <!-- GPS Status -->
+            <div class="alert alert-info" id="gpsStatus">
+              <i class="fas fa-spinner fa-spin"></i> Attempting to get your
+              device's GPS location...
+            </div>
+
+            <!-- GPS Fields (Hidden but still submitted) -->
+            <div style="display: none;">
+              {{ form.lat }}
+              {{ form.long }}
+            </div>
+
+            <!-- Administrative Location Section -->
+            <div class="section-title mt-4 mb-3">
+              <h5 class="form-section-title">Location Information</h5>
+              <small class="text-muted"
+                >Your farm location will be auto-detected from GPS coordinates</small
+              >
+            </div>
+
+            <div class="row">
+              <div class="col-md-4 mb-3">
+                <label
+                  for="{{ form.county.id_for_label }}"
+                  class="form-label"
+                >
+                  County
+                </label>
+                {{ form.county }}
+                <small class="form-text text-muted d-block mt-1"
+                  >Auto-filled from GPS location</small
+                >
+                {% if form.county.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.county.errors }}
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label
+                  for="{{ form.sub_county.id_for_label }}"
+                  class="form-label"
+                >
+                  Sub-County <span class="text-danger">*</span>
+                </label>
+                {{ form.sub_county }}
+                <small class="form-text text-muted d-block mt-1"
+                  >e.g., Kasipul, Muhoroni</small
+                >
+                {% if form.sub_county.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.sub_county.errors }}
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label for="{{ form.ward.id_for_label }}" class="form-label">
+                  Ward <span class="text-danger">*</span>
+                </label>
+                {{ form.ward }}
+                <small class="form-text text-muted d-block mt-1"
+                  >e.g., Kabar, Chemase</small
+                >
+                {% if form.ward.errors %}
+                <div class="text-danger mt-1" style="font-size: 0.85rem">
+                  {{ form.ward.errors }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Location Verification Warning -->
+            <div
+              class="alert alert-warning"
+              id="locationWarning"
+              style="display: none"
+            >
+              <i class="fas fa-exclamation-triangle"></i>
+              <strong>Location Verification Notice:</strong> Your GPS location
+              and administrative location (Sub-County/Ward) appear to be far
+              apart. Please confirm that you're actually at your farm location
+              and not registering from elsewhere (e.g., a cyber cafe). Click the
+              checkbox below to confirm.
+              <div class="mt-2">
+                <input
+                  type="checkbox"
+                  id="confirmLocation"
+                  name="confirmLocation"
+                />
+                <label for="confirmLocation" class="form-check-label">
+                  I confirm that I am at my farm location and the GPS reading is
+                  accurate.
+                </label>
+              </div>
+            </div>
+
+            <!-- Farm Details Section -->
+            <div class="section-title mt-4 mb-3">
+              <h5 class="form-section-title">Farm Details</h5>
+            </div>
+
+            <div class="mb-3">
+              <label for="{{ form.crop_type.id_for_label }}" class="form-label">
+                Crop Type <span class="text-danger">*</span>
+              </label>
+              {{ form.crop_type }}
+              <small class="form-text text-muted d-block mt-1"
+                >Select the primary crop you intend to grow</small
+              >
+              {% if form.crop_type.errors %}
+              <div class="text-danger mt-1" style="font-size: 0.85rem">
+                {{ form.crop_type.errors }}
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- Non-field Errors -->
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger mt-3">
+              {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Submit Button -->
+            <div class="d-grid gap-2 mt-4">
+              <button
+                type="submit"
+                class="btn btn-lg"
+                id="submitBtn"
+                style="
+                  background-color: rgb(0, 119, 26);
+                  border-color: rgb(0, 119, 26);
+                  color: white;
+                "
+              >
+                <i class="fas fa-save"></i> Save Farm Details
+              </button>
+            </div>
+
+            <div class="text-center mt-3">
+              <a href="{% url 'dashboard' %}" class="text-muted"
+                >Skip for now</a
+              >
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .section-title {
+    margin-top: 1.5rem;
+  }
+
+  .form-section-title {
+    color: rgb(0, 119, 26);
+    border-bottom: 2px solid rgb(0, 119, 26);
+    padding-bottom: 0.5rem;
+  }
+
+  .card {
+    border: none;
+    border-radius: 0.5rem;
+  }
+
+  .card-header {
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  .form-control {
+    border-color: #ddd;
+  }
+
+  .form-control:focus {
+    border-color: rgb(0, 119, 26);
+    box-shadow: 0 0 0 0.2rem rgba(0, 119, 26, 0.25);
+  }
+
+  .btn-lg {
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+  }
+
+  .btn-lg:hover {
+    background-color: #0a7a1a !important;
+    border-color: #066215 !important;
+  }
+
+  .form-check-label {
+    margin-left: 0.5rem;
+  }
+
+  /* Location Popup Styles */
+  .location-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    text-align: center;
+    min-width: 300px;
+    animation: popupSlideIn 0.5s ease-out;
+  }
+
+  .location-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes popupSlideIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -60%);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .location-popup-icon {
+    font-size: 3rem;
+    color: rgb(0, 119, 26);
+    margin-bottom: 1rem;
+    animation: scaleIn 0.6s ease-out 0.2s both;
+  }
+
+  .location-popup-text {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+    animation: fadeIn 0.6s ease-out 0.4s both;
+  }
+
+  .location-popup-subtext {
+    font-size: 1rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.6s ease-out 0.6s both;
+  }
+
+  .location-popup-button {
+    background-color: rgb(0, 119, 26);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    animation: fadeIn 0.6s ease-out 0.8s both;
+  }
+
+  .location-popup-button:hover {
+    background-color: #0a7a1a;
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  .location-popup.fade-out {
+    animation: fadeOut 0.3s ease-out forwards;
+  }
+
+  .location-popup.fade-out ~ .location-popup-overlay {
+    animation: fadeOut 0.3s ease-out forwards;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Get GPS coordinates from device
+    getDeviceLocation();
+
+    // Get form references
+    const form = document.getElementById("farmerForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const confirmCheckbox = document.getElementById("confirmLocation");
+
+    // Handle form submission
+    form.addEventListener("submit", function (e) {
+      // Check if location warning is visible and user needs to confirm
+      const locationWarning = document.getElementById("locationWarning");
+      if (
+        locationWarning.style.display !== "none" &&
+        !confirmCheckbox.checked
+      ) {
+        e.preventDefault();
+        alert(
+          "Please confirm that you are at your farm location before submitting.",
+        );
+        return false;
+      }
+    });
+  });
+
+  function showLocationPopup() {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'location-popup-overlay';
+
+    // Create popup
+    const popup = document.createElement('div');
+    popup.className = 'location-popup';
+    popup.innerHTML = `
+      <div class="location-popup-icon">
+        <i class="fas fa-map-pin"></i>
+      </div>
+      <div class="location-popup-text">Your location has been captured</div>
+      <div class="location-popup-subtext">Location information is being auto-filled</div>
+      <button class="location-popup-button" onclick="closeLocationPopup()">Dismiss</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(popup);
+
+    // Auto-close after 3 seconds
+    setTimeout(() => {
+      closeLocationPopup();
+    }, 3000);
+  }
+
+  function closeLocationPopup() {
+    const popup = document.querySelector('.location-popup');
+    const overlay = document.querySelector('.location-popup-overlay');
+
+    if (popup) {
+      popup.classList.add('fade-out');
+      setTimeout(() => popup.remove(), 300);
+    }
+    if (overlay) {
+      overlay.classList.add('fade-out');
+      setTimeout(() => overlay.remove(), 300);
+    }
+  }
+
+  function getDeviceLocation() {
+    const gpsStatus = document.getElementById("gpsStatus");
+    const latField = document.getElementById("lat-field");
+    const longField = document.getElementById("long-field");
+
+    if (!gpsStatus || !latField || !longField) {
+      console.warn("GPS form fields not found");
+      return;
+    }
+
+    if (navigator.geolocation) {
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      };
+
+      navigator.geolocation.getCurrentPosition(
+        function (position) {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+
+          // Set form field values
+          latField.value = latitude.toFixed(6);
+          longField.value = longitude.toFixed(6);
+
+          // Update status - show that we're geocoding
+          gpsStatus.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> GPS location captured! Auto-filling location information...';
+          gpsStatus.className = "alert alert-info";
+
+          // Call reverse geocoding API
+          fetch('{% url "reverse_geocode_api" %}?lat=' + latitude + '&lon=' + longitude)
+            .then(response => response.json())
+            .then(data => {
+              console.log('Geocoding API response:', data);
+              if (data.status === 'success') {
+                // Auto-fill the location fields
+                const countyField = document.querySelector('[name="county"]');
+                const subCountyField = document.querySelector('[name="sub_county"]');
+                const wardField = document.querySelector('[name="ward"]');
+
+                console.log('Form fields found:', {
+                  countyField: !!countyField,
+                  subCountyField: !!subCountyField,
+                  wardField: !!wardField
+                });
+                console.log('API data:', data.data);
+
+                if (data.data.county && countyField) {
+                  countyField.value = data.data.county;
+                  console.log('Set county to:', data.data.county);
+                }
+                if (data.data.sub_county && subCountyField) {
+                  subCountyField.value = data.data.sub_county;
+                  console.log('Set sub_county to:', data.data.sub_county);
+                }
+                if (data.data.ward && wardField) {
+                  wardField.value = data.data.ward;
+                  console.log('Set ward to:', data.data.ward);
+                } else {
+                  console.warn('Ward not found or empty:', 'ward' in data.data, data.data.ward);
+                }
+
+                // Hide the status alert
+                gpsStatus.style.display = 'none';
+
+                // Show success popup
+                showLocationPopup();
+              } else {
+                // Geocoding failed - show warning
+                gpsStatus.innerHTML =
+                  '<i class="fas fa-exclamation-circle text-warning"></i> GPS location captured, but could not auto-fill location. Please enter your Sub-County and Ward manually below.';
+                gpsStatus.className = "alert alert-warning";
+              }
+            })
+            .catch(error => {
+              console.error('Geocoding error:', error);
+              gpsStatus.innerHTML =
+                '<i class="fas fa-exclamation-circle text-warning"></i> GPS location captured, but auto-fill encountered an error. Please enter your Sub-County and Ward manually below.';
+              gpsStatus.className = "alert alert-warning";
+            });
+        },
+        function (error) {
+          let errorMessage = "";
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage =
+                "GPS permission denied. Please enable location access in your browser settings.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage =
+                "GPS position unavailable. Please ensure you have a clear view of the sky.";
+              break;
+            case error.TIMEOUT:
+              errorMessage = "GPS request timed out. Please try again.";
+              break;
+            default:
+              errorMessage = "Error: " + error.message;
+          }
+
+          gpsStatus.innerHTML =
+            '<i class="fas fa-exclamation-circle text-warning"></i> ' +
+            errorMessage +
+            " You can manually fill in your Sub-County and Ward below.";
+          gpsStatus.className = "alert alert-warning";
+        },
+        options,
+      );
+    } else {
+      gpsStatus.innerHTML =
+        '<i class="fas fa-times-circle text-danger"></i> Geolocation is not supported by your browser. You can still register by providing your Sub-County and Ward below.';
+      gpsStatus.className = "alert alert-danger";
+    }
+  }
+
+</script>
+{% endblock %}

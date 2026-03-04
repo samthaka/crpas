@@ -31,6 +31,14 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS').split(',')
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
+# CSRF Settings - Ensure proper CSRF token validation
+CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_HTTPONLY = False  # Must be False for JavaScript access to CSRF token
+CSRF_COOKIE_SAMESITE = 'Lax'  # Allow CSRF token to be sent with same-site requests
+# Build CSRF_TRUSTED_ORIGINS with proper schemes
+_allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+CSRF_TRUSTED_ORIGINS = [f'http://{host.strip()}' for host in _allowed_hosts]
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -119,8 +127,53 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static/'),
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# Custom User Model
+AUTH_USER_MODEL = 'app.CustomUser'
+
+# Custom Authentication Backend
+AUTHENTICATION_BACKENDS = [
+    'app.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
+]
+
+# Login/Logout settings
+LOGIN_URL = 'auth'
+LOGIN_REDIRECT_URL = 'dashboard'
+LOGOUT_REDIRECT_URL = 'auth'
+
+# Logging configuration for debugging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'app.views': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
