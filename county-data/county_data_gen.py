@@ -1,123 +1,110 @@
 # This script extracts county, constituency, and ward data from a PDF and stores it in a SQLite database.
 import pdfplumber
 import sqlite3
+import psutil
+import os
+import gc
+import re
+from tqdm import tqdm
 
 PDF_PATH = "kenya_admin.pdf"
 DB_PATH = "kenya_admin.db"
 
-# Connect to SQLite
+
+process = psutil.Process(os.getpid())
+
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
-
-# Create tables
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS counties (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS constituencies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    county_id INTEGER,
-    UNIQUE(name, county_id),
-    FOREIGN KEY (county_id) REFERENCES counties(id)
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS wards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    constituency_id INTEGER,
-    UNIQUE(name, constituency_id),
-    FOREIGN KEY (constituency_id) REFERENCES constituencies(id)
-)
-""")
-
-conn.commit()
-
-
-def get_or_create_county(name):
-    cursor.execute("INSERT OR IGNORE INTO counties (name) VALUES (?)", (name,))
-    conn.commit()
-    cursor.execute("SELECT id FROM counties WHERE name=?", (name,))
-    return cursor.fetchone()[0]
-
-
-def get_or_create_constituency(name, county_id):
-    cursor.execute("""
-        INSERT OR IGNORE INTO constituencies (name, county_id)
-        VALUES (?, ?)
-    """, (name, county_id))
-    conn.commit()
-    cursor.execute("""
-        SELECT id FROM constituencies
-        WHERE name=? AND county_id=?
-    """, (name, county_id))
-    return cursor.fetchone()[0]
-
-
-def get_or_create_ward(name, constituency_id):
-    cursor.execute("""
-        INSERT OR IGNORE INTO wards (name, constituency_id)
-        VALUES (?, ?)
-    """, (name, constituency_id))
-    conn.commit()
-
 
 last_county = None
 last_constituency = None
 last_ward = None
 
 with pdfplumber.open(PDF_PATH) as pdf:
-    for page in pdf.pages:
-        table = page.extract_table()
-        if not table:
-            continue
+    total_pages = len(pdf.pages)
 
-        for row in table[1:]:  # skip header
-            try:
-                county = row[1].strip()
-                constituency = row[2].strip()
-                ward = row[3].strip()
+    with tqdm(total=total_pages, desc="Processing", unit="page") as pbar:
 
-                # Stop when DIASPORA appears
-                if county.upper() == "DIASPORA":
-                    print("Reached DIASPORA — stopping extraction.")
+        for page in pdf.pages:
+
+            text = page.extract_text()
+            if not text:
+                pbar.update(1)
+                continue
+
+            lines = text.split("\n")
+
+            for line in lines:
+
+                if "DIASPORA" in line.upper():
+                    print("\nReached DIASPORA — stopping.")
                     conn.commit()
                     conn.close()
                     exit()
 
-                # Skip empty rows
-                if not county or not constituency or not ward:
+                if "PS ID" in line and "COUNTY" in line:
                     continue
 
-                # Detect changes in hierarchy
-                if county != last_county:
-                    county_id = get_or_create_county(county)
-                    last_county = county
-                    last_constituency = None  # reset lower levels
+                parts = re.split(r"\s{2,}", line.strip())
 
-                if constituency != last_constituency:
-                    constituency_id = get_or_create_constituency(
-                        constituency, county_id
-                    )
-                    last_constituency = constituency
-                    last_ward = None
+                if len(parts) < 4:
+                    continue
 
-                if ward != last_ward:
-                    get_or_create_ward(ward, constituency_id)
-                    last_ward = ward
+                try:
+                    county = parts[1].strip()
+                    constituency = parts[2].strip()
+                    ward = parts[3].strip()
 
-            except Exception as e:
-                print("Skipping problematic row:", row)
-                print("Error:", e)
-                continue
+                    if not county or not constituency or not ward:
+                        continue
+
+                    if county != last_county:
+                        cursor.execute("INSERT OR IGNORE INTO counties (name) VALUES (?)", (county,))
+                        cursor.execute("SELECT id FROM counties WHERE name=?", (county,))
+                        county_id = cursor.fetchone()[0]
+                        last_county = county
+                        last_constituency = None
+
+                    if constituency != last_constituency:
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO constituencies (name, county_id)
+                            VALUES (?, ?)
+                        """, (constituency, county_id))
+                        cursor.execute("""
+                            SELECT id FROM constituencies
+                            WHERE name=? AND county_id=?
+                        """, (constituency, county_id))
+                        constituency_id = cursor.fetchone()[0]
+                        last_constituency = constituency
+                        last_ward = None
+
+                    if ward != last_ward:
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO wards (name, constituency_id)
+                            VALUES (?, ?)
+                        """, (ward, constituency_id))
+                        last_ward = ward
+
+                except:
+                    continue
+
+            conn.commit()
+
+            # Resource Monitoring
+            mem_mb = process.memory_info().rss / (1024 * 1024)
+            cpu = process.cpu_percent(interval=None)
+
+            pbar.set_postfix({
+                "RAM_MB": f"{mem_mb:.0f}",
+                "CPU_%": f"{cpu:.1f}"
+            })
+
+            del text
+            del lines
+            gc.collect()
+
+            pbar.update(1)
 
 conn.commit()
 conn.close()
-
-print("Extraction completed successfully.")
+print("\nExtraction complete.")

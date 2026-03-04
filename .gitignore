@@ -1,4 +1,5 @@
 db.sqlite3
+!county-data/kenya_admin.db
 .env
 __pycache__/
 *.pyc
