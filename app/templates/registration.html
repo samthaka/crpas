@@ -304,6 +304,119 @@ CRPAS{% endblock %} {% block content %}
   .form-check-label {
     margin-left: 0.5rem;
   }
+
+  /* Location Popup Styles */
+  .location-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    text-align: center;
+    min-width: 300px;
+    animation: popupSlideIn 0.5s ease-out;
+  }
+
+  .location-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes popupSlideIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -60%);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .location-popup-icon {
+    font-size: 3rem;
+    color: rgb(0, 119, 26);
+    margin-bottom: 1rem;
+    animation: scaleIn 0.6s ease-out 0.2s both;
+  }
+
+  .location-popup-text {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+    animation: fadeIn 0.6s ease-out 0.4s both;
+  }
+
+  .location-popup-subtext {
+    font-size: 1rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.6s ease-out 0.6s both;
+  }
+
+  .location-popup-button {
+    background-color: rgb(0, 119, 26);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    animation: fadeIn 0.6s ease-out 0.8s both;
+  }
+
+  .location-popup-button:hover {
+    background-color: #0a7a1a;
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  .location-popup.fade-out {
+    animation: fadeOut 0.3s ease-out forwards;
+  }
+
+  .location-popup.fade-out ~ .location-popup-overlay {
+    animation: fadeOut 0.3s ease-out forwards;
+  }
 </style>
 
 <script>
@@ -332,6 +445,46 @@ CRPAS{% endblock %} {% block content %}
       }
     });
   });
+
+  function showLocationPopup() {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'location-popup-overlay';
+
+    // Create popup
+    const popup = document.createElement('div');
+    popup.className = 'location-popup';
+    popup.innerHTML = `
+      <div class="location-popup-icon">
+        <i class="fas fa-map-pin"></i>
+      </div>
+      <div class="location-popup-text">Your location has been captured</div>
+      <div class="location-popup-subtext">Location information is being auto-filled</div>
+      <button class="location-popup-button" onclick="closeLocationPopup()">Dismiss</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(popup);
+
+    // Auto-close after 3 seconds
+    setTimeout(() => {
+      closeLocationPopup();
+    }, 3000);
+  }
+
+  function closeLocationPopup() {
+    const popup = document.querySelector('.location-popup');
+    const overlay = document.querySelector('.location-popup-overlay');
+
+    if (popup) {
+      popup.classList.add('fade-out');
+      setTimeout(() => popup.remove(), 300);
+    }
+    if (overlay) {
+      overlay.classList.add('fade-out');
+      setTimeout(() => overlay.remove(), 300);
+    }
+  }
 
   function getDeviceLocation() {
     const gpsStatus = document.getElementById("gpsStatus");
@@ -397,16 +550,11 @@ CRPAS{% endblock %} {% block content %}
                   console.warn('Ward not found or empty:', 'ward' in data.data, data.data.ward);
                 }
 
-                // Success message
-                gpsStatus.innerHTML =
-                  '<i class="fas fa-check-circle text-success"></i> Perfect! Your location has been detected and auto-filled. County: <strong>' +
-                  (data.data.county || 'N/A') +
-                  '</strong>, Sub-County: <strong>' +
-                  (data.data.sub_county || 'N/A') +
-                  '</strong>, Ward: <strong>' +
-                  (data.data.ward || 'N/A') +
-                  '</strong>';
-                gpsStatus.className = "alert alert-success";
+                // Hide the status alert
+                gpsStatus.style.display = 'none';
+
+                // Show success popup
+                showLocationPopup();
               } else {
                 // Geocoding failed - show warning
                 gpsStatus.innerHTML =

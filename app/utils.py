@@ -1,5 +1,8 @@
 import logging
 import requests
+import sqlite3
+import os
+from difflib import SequenceMatcher
 from django.conf import settings
 from datetime import datetime, timedelta
 
@@ -14,19 +17,262 @@ except ImportError:
     GROQ_AVAILABLE = False
     logger.warning("Groq module not installed - chat features will not work")
 
+# Path to the Kenya admin database
+KENYA_ADMIN_DB = os.path.join(os.path.dirname(__file__), '..', 'county-data', 'kenya_admin.db')
+
+
+def format_location_name(name):
+    """
+    Format location names for UI display.
+    Converts to title case: 'KISII CENTRAL' → 'Kisii Central'
+    """
+    if not name:
+        return name
+    return name.title()
+
+
+def remove_county_suffix(county_name):
+    """
+    Remove ' County' suffix from county name.
+    'Kisii County' → 'Kisii'
+    """
+    if not county_name:
+        return county_name
+    if county_name.endswith(' County'):
+        return county_name[:-7].strip()  # Remove ' County' (7 chars)
+    return county_name
+
+
+def fuzzy_match(name, choices, threshold=0.70):
+    """
+    Fuzzy match a name against a list of choices.
+    Returns the best match if similarity >= threshold, else None.
+    
+    Args:
+        name: String to match
+        choices: List of strings to match against
+        threshold: Minimum similarity score (0-1)
+    
+    Returns:
+        Best matching string or None
+    """
+    if not name or not choices:
+        return None
+    
+    name_lower = name.lower().strip()
+    best_match = None
+    best_score = 0
+    
+    for choice in choices:
+        choice_lower = choice.lower().strip()
+        # Calculate similarity ratio
+        score = SequenceMatcher(None, name_lower, choice_lower).ratio()
+        if score > best_score:
+            best_score = score
+            best_match = choice
+    
+    if best_score >= threshold:
+        logger.debug(f"Fuzzy match: '{name}' → '{best_match}' (score: {best_score:.2f})")
+        return best_match
+    
+    logger.debug(f"No fuzzy match for '{name}' (best score: {best_score:.2f}, threshold: {threshold})")
+    return None
+
+
+def get_wards_in_constituency(constituency_name):
+    """
+    Query kenya_admin.db to get all wards in a given constituency.
+    
+    Args:
+        constituency_name: Name of the constituency (sub-county)
+    
+    Returns:
+        List of ward names, or empty list if not found
+    """
+    try:
+        if not os.path.exists(KENYA_ADMIN_DB):
+            logger.error(f"Kenya admin DB not found at {KENYA_ADMIN_DB}")
+            return []
+        
+        conn = sqlite3.connect(KENYA_ADMIN_DB)
+        cursor = conn.cursor()
+        
+        # First, find the constituency ID
+        cursor.execute(
+            "SELECT id FROM constituencies WHERE LOWER(name) = LOWER(?)",
+            (constituency_name,)
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            logger.warning(f"Constituency '{constituency_name}' not found in DB")
+            conn.close()
+            return []
+        
+        constituency_id = result[0]
+        
+        # Now get all wards in this constituency
+        cursor.execute(
+            "SELECT name FROM wards WHERE constituency_id = ? ORDER BY name",
+            (constituency_id,)
+        )
+        wards = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        logger.info(f"Found {len(wards)} wards in constituency '{constituency_name}': {wards}")
+        return wards
+    
+    except Exception as e:
+        logger.error(f"Error querying wards in constituency: {str(e)}")
+        return []
+
+
+def find_constituency_by_ward(ward_name):
+    """
+    Reverse lookup: Given a ward name, find which constituency it belongs to.
+    This handles cases where Nominatim's 'county' field actually contains a ward name.
+    
+    Args:
+        ward_name: Name of the ward to search for
+    
+    Returns:
+        Tuple of (constituency_name, valid_ward_name) if found, else None
+    """
+    try:
+        if not os.path.exists(KENYA_ADMIN_DB):
+            logger.error(f"Kenya admin DB not found at {KENYA_ADMIN_DB}")
+            return None
+        
+        conn = sqlite3.connect(KENYA_ADMIN_DB)
+        cursor = conn.cursor()
+        
+        # Try exact match first
+        cursor.execute("""
+            SELECT c.name, w.name
+            FROM wards w
+            JOIN constituencies c ON w.constituency_id = c.id
+            WHERE LOWER(w.name) = LOWER(?)
+            LIMIT 1
+        """, (ward_name,))
+        
+        result = cursor.fetchone()
+        if result:
+            logger.info(f"Found ward '{ward_name}' in constituency '{result[0]}'")
+            conn.close()
+            return result  # (constituency_name, ward_name)
+        
+        # Try fuzzy match if exact doesn't work
+        cursor.execute("SELECT name FROM wards")
+        all_wards = [row[0] for row in cursor.fetchall()]
+        
+        matched_ward = fuzzy_match(ward_name, all_wards, threshold=0.70)
+        if matched_ward:
+            cursor.execute("""
+                SELECT c.name, w.name
+                FROM wards w
+                JOIN constituencies c ON w.constituency_id = c.id
+                WHERE LOWER(w.name) = LOWER(?)
+                LIMIT 1
+            """, (matched_ward,))
+            result = cursor.fetchone()
+            if result:
+                logger.info(f"Fuzzy matched '{ward_name}' to ward '{matched_ward}' in constituency '{result[0]}'")
+                conn.close()
+                return result
+        
+        logger.warning(f"Ward '{ward_name}' not found in database")
+        conn.close()
+        return None
+    
+    except Exception as e:
+        logger.error(f"Error finding constituency by ward: {str(e)}")
+        return None
+
+
+def validate_ward_in_constituency(ward_name, constituency_name):
+    """
+    Check if a ward belongs to a given constituency in the DB.
+    Uses fuzzy matching to handle naming variations.
+    
+    Args:
+        ward_name: Name of the ward
+        constituency_name: Name of the constituency
+    
+    Returns:
+        Validated ward name from DB, or None
+    """
+    try:
+        if not os.path.exists(KENYA_ADMIN_DB):
+            logger.error(f"Kenya admin DB not found at {KENYA_ADMIN_DB}")
+            return None
+        
+        conn = sqlite3.connect(KENYA_ADMIN_DB)
+        cursor = conn.cursor()
+        
+        # Find constituency ID
+        cursor.execute(
+            "SELECT id FROM constituencies WHERE LOWER(name) = LOWER(?)",
+            (constituency_name,)
+        )
+        result = cursor.fetchone()
+        
+        if not result:
+            logger.warning(f"Constituency '{constituency_name}' not found in DB")
+            conn.close()
+            return None
+        
+        constituency_id = result[0]
+        
+        # Get all wards in this constituency
+        cursor.execute(
+            "SELECT name FROM wards WHERE constituency_id = ? ORDER BY name",
+            (constituency_id,)
+        )
+        valid_wards = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        # Try exact match first
+        for w in valid_wards:
+            if w.lower() == ward_name.lower():
+                logger.info(f"Ward '{ward_name}' validated in constituency '{constituency_name}'")
+                return w
+        
+        # Try fuzzy match
+        matched_ward = fuzzy_match(ward_name, valid_wards, threshold=0.70)
+        if matched_ward:
+            logger.info(f"Ward '{ward_name}' fuzzy-matched to '{matched_ward}' in constituency '{constituency_name}'")
+            return matched_ward
+        
+        logger.warning(f"Ward '{ward_name}' not found in constituency '{constituency_name}'")
+        return None
+    
+    except Exception as e:
+        logger.error(f"Error validating ward: {str(e)}")
+        return None
+
+
 def reverse_geocode_coordinates(lat, lon):
     """
     Reverse geocode GPS coordinates to extract Kenya administrative divisions.
     Uses Nominatim (OpenStreetMap) - free API, no key required.
+    Falls back to kenya_admin.db when Nominatim doesn't return valid data.
+    
+    IMPORTANT: Nominatim's field mapping is confusing for Kenya:
+    - state → County (correct)
+    - county → Can be ward name, not constituency!
+    - town/village → May be locality, not necessarily the ward
+    
+    So we do reverse lookups in the DB to find the correct hierarchy.
     
     Returns a dict with:
     {
         'county': 'County Name',
         'sub_county': 'Sub-County Name',
-        'ward': 'Ward Name'
+        'ward': 'Ward Name',
+        'confidence': 'HIGH|MEDIUM|LOW|DB_FALLBACK'
     }
     
-    Returns None if geocoding fails.
+    Returns None if geocoding fails completely.
     """
     if not lat or not lon:
         return None
@@ -52,56 +298,103 @@ def reverse_geocode_coordinates(lat, lon):
         data = response.json()
         
         if not data:
+            logger.warning(f"Empty response from Nominatim for ({lat}, {lon})")
             return None
         
         address = data.get('address', {})
-        
-        # Extract Kenya administrative divisions from OSM address tags
-        # Nominatim uses different field names depending on the area:
-        # Rural areas: state (county), county (sub-county), town/village/hamlet (ward)
-        # Urban areas: state (region), city_district (sub-county), suburb (ward)
-        
-        # Extract County
-        county = address.get('state')
-        if county and not county.endswith(' County'):
-            county = f"{county} County"
-        
-        # Extract Sub-County - try different field names
-        sub_county = (address.get('county') or 
-                     address.get('city_district') or
-                     address.get('municipality'))
-        
-        # Extract Ward - try multiple field names
-        ward = (address.get('town') or 
-                address.get('village') or 
-                address.get('hamlet') or 
-                address.get('suburb') or
-                address.get('neighbourhood') or
-                address.get('locality') or
-                address.get('district'))
-        
-        # Log what we're getting for debugging
         logger.debug(f"Full address from Nominatim: {address}")
-        logger.debug(f"Extracted: county={county}, sub_county={sub_county}, ward={ward}")
         
-        # Build result
-        result = {}
+        # Extract County (from state field - this is reliable)
+        county = address.get('state')
         if county:
-            result['county'] = county
-            logger.info(f"Reverse geocoded county: {county}")
-        if sub_county:
-            result['sub_county'] = sub_county
-            logger.info(f"Reverse geocoded sub-county: {sub_county}")
-        if ward:
-            result['ward'] = ward
-            logger.info(f"Reverse geocoded ward: {ward}")
+            # Remove ' County' suffix and format
+            county = remove_county_suffix(county)
+            county = format_location_name(county)
         
-        if result:
-            logger.info(f"Reverse geocoded ({lat}, {lon}) → {result}")
-            return result
-        else:
-            logger.warning(f"Could not extract admin divisions from geocoding response: {address}")
+        if not county:
+            logger.error(f"Could not extract county from Nominatim for ({lat}, {lon})")
             return None
+        
+        # KEY INSIGHT: Nominatim's 'county' field often contains a WARD name, not the constituency!
+        # We need to intelligently parse what we got and reverse-lookup in the DB
+        nominatim_county = address.get('county')  # Could be ward, could be constituency
+        nominatim_town = address.get('town')
+        nominatim_village = address.get('village')
+        nominatim_hamlet = address.get('hamlet')
+        nominatim_district = address.get('district')
+        
+        # Collect all potential ward names from Nominatim
+        potential_wards = [w for w in [
+            nominatim_county,
+            nominatim_town,
+            nominatim_village,
+            nominatim_hamlet,
+            nominatim_district,
+            address.get('suburb'),
+            address.get('neighbourhood'),
+            address.get('locality')
+        ] if w]
+        
+        logger.debug(f"Potential wards from Nominatim: {potential_wards}")
+        
+        result = {'county': county}
+        confidence = 'HIGH'
+        final_ward = None
+        final_constituency = None
+        
+        # STRATEGY: Try to find the ward by reverse-lookup
+        # For each potential ward name, check if it exists in the DB
+        for potential_ward in potential_wards:
+            lookup_result = find_constituency_by_ward(potential_ward)
+            if lookup_result:
+                final_constituency, final_ward = lookup_result
+                logger.info(f"Reverse lookup found: ward='{final_ward}' in constituency='{final_constituency}'")
+                break
+        
+        # If we found a valid ward & constituency through reverse lookup
+        if final_constituency and final_ward:
+            result['sub_county'] = format_location_name(final_constituency)
+            result['ward'] = format_location_name(final_ward)
+            confidence = 'HIGH'
+            logger.info(f"Geocoded ({lat}, {lon}) → County: {county}, Sub-county: {result['sub_county']}, Ward: {result['ward']}")
+        
+        else:
+            # Fallback: Try to validate the sub_county field from Nominatim
+            # First, try to find a constituency that matches
+            if nominatim_county:
+                # Check if this is a valid constituency in the DB
+                wards_in_constituency = get_wards_in_constituency(nominatim_county)
+                if wards_in_constituency:
+                    # It's a valid constituency!
+                    result['sub_county'] = format_location_name(nominatim_county)
+                    result['ward'] = format_location_name(wards_in_constituency[0])  # Use first ward as primary
+                    if len(wards_in_constituency) > 1:
+                        result['suggested_wards'] = [format_location_name(w) for w in wards_in_constituency[:5]]
+                    confidence = 'DB_FALLBACK'
+                    logger.info(f"Used first ward '{result['ward']}' from DB for constituency '{result['sub_county']}'")
+                else:
+                    # Not a valid constituency - try reverse lookup on it
+                    lookup_result = find_constituency_by_ward(nominatim_county)
+                    if lookup_result:
+                        final_constituency, final_ward = lookup_result
+                        result['sub_county'] = format_location_name(final_constituency)
+                        result['ward'] = format_location_name(final_ward)
+                        confidence = 'MEDIUM'
+                        logger.info(f"Nominatim's 'county' field was actually a ward: '{result['ward']}' in '{result['sub_county']}'")
+                    else:
+                        confidence = 'LOW'
+                        logger.warning(f"Nominatim's county field '{nominatim_county}' is neither a constituency nor a ward in DB")
+        
+        # Final fallback: If we still don't have anything, query by GPS proximity
+        if not result.get('ward'):
+            logger.warning(f"Could not determine ward for ({lat}, {lon}), confidence is LOW")
+            result['confidence'] = 'LOW'
+            return result if 'sub_county' in result else None
+        
+        # Add confidence metric to result
+        result['confidence'] = confidence
+        logger.info(f"Reverse geocoded ({lat}, {lon}) → {result}")
+        return result
             
     except requests.exceptions.Timeout:
         logger.error(f"Nominatim API timeout for ({lat}, {lon})")
