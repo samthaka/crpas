@@ -1,12 +1,31 @@
 from django.contrib import admin
-from .models import Farmer, Notification, NotificationPreference, NotificationTriggerLog
+from .models import Farmer, Farm, Notification, NotificationPreference, NotificationTriggerLog
 
 @admin.register(Farmer)
 class FarmerAdmin(admin.ModelAdmin):
-    list_display = ('fname', 'lname', 'phone', 'crop_type', 'lat', 'long', 'created_at')
-    list_filter = ('crop_type', 'created_at')
-    search_fields = ('fname', 'lname', 'phone')
+    list_display = ('fname', 'lname', 'phone', 'email', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('fname', 'lname', 'phone', 'email')
     readonly_fields = ('gemini_chat_history', 'created_at', 'updated_at')
+
+
+@admin.register(Farm)
+class FarmAdmin(admin.ModelAdmin):
+    list_display = ('farm_name', 'farmer', 'crop_type', 'farm_size', 'sub_county', 'ward', 'created_at')
+    list_filter = ('crop_type', 'created_at', 'sub_county')
+    search_fields = ('farm_name', 'farmer__fname', 'farmer__lname', 'sub_county', 'ward')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('Farmer & Farm Info', {
+            'fields': ('farmer', 'farm_name', 'crop_type', 'farm_size')
+        }),
+        ('Location Details', {
+            'fields': ('county', 'sub_county', 'ward', 'lat', 'long', 'gps_accuracy', 'location_verified')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
 
 
 @admin.register(Notification)

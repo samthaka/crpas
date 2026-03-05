@@ -2,9 +2,9 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import ListView, DetailView
 from django.contrib import messages
 from django.http import JsonResponse
-from .models import Farmer, ChatThread, Notification
-from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor
-from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerRegistrationForm
+from .models import Farmer, Farm, ChatThread, Notification
+from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor, reverse_geocode_coordinates
+from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerProfileForm, FarmRegistrationForm
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 import logging
@@ -14,7 +14,14 @@ CustomUser = get_user_model()
 
 @login_required(login_url='auth')
 def dashboard(request):
-    return render(request, 'dashboard/dashboard.html')
+    # Get farmer profile and farms
+    farmer = Farmer.objects.filter(email=request.user.email).first()
+    farms = Farm.objects.filter(farmer=farmer) if farmer else []
+    
+    return render(request, 'dashboard/dashboard.html', {
+        'farmer': farmer,
+        'farms': farms,
+    })
 
 def index_redirect(request):
     """
@@ -120,15 +127,57 @@ def logout_view(request):
 @login_required(login_url='auth')
 def farmer_registration(request):
     """
-    Handle farmer registration where users add plot and contact information.
-    Prefills email from request.user.
-    Auto-fills county, sub_county, and ward from GPS coordinates using reverse geocoding.
+    Step 1: Handle farmer profile registration/editing.
+    Creates or updates the Farmer profile with personal details (fname, lname, phone, email).
+    After completion, redirects to farm_registration for farm details.
     """
-    from .utils import reverse_geocode_coordinates
+    # Get or create farmer profile for the logged-in user
+    farmer = Farmer.objects.filter(email=request.user.email).first()
     
-    # Check if farmer already has a profile linked to the logged-in user's email
-    # Use filter().first() to avoid MultipleObjectsReturned if multiple farmers exist with same email
-    farmer = Farmer.objects.filter(email=request.user.email).first() if request.user.is_authenticated else None
+    if request.method == 'POST':
+        form = FarmerProfileForm(request.POST, instance=farmer)
+        if form.is_valid():
+            farmer = form.save(commit=False)
+            # Ensure email matches the logged-in user
+            farmer.email = request.user.email
+            farmer.save()
+            messages.success(request, "Your profile has been saved successfully!")
+            return redirect('farm_registration')
+    else:
+        # Prefill the form with logged-in user's email
+        initial_data = {
+            'email': request.user.email,
+        }
+        form = FarmerProfileForm(instance=farmer, initial=initial_data)
+    
+    return render(request, 'registration.html', {
+        'form': form,
+        'step': 'farmer',
+        'title': 'Farmer Profile Registration'
+    })
+
+
+@login_required(login_url='auth')
+def farm_registration(request):
+    """
+    Step 2: Handle farm registration/editing.
+    Creates or updates a Farm profile with farm details (crop_type, farm_size, location, etc.).
+    Only accessible after farmer profile is completed.
+    """
+    # Verify farmer profile exists
+    farmer = Farmer.objects.filter(email=request.user.email).first()
+    if not farmer:
+        messages.error(request, "Please complete your farmer profile first.")
+        return redirect('farmer_registration')
+    
+    # Check if this is an edit (farm_id parameter) or new registration
+    farm_id = request.GET.get('farm_id')
+    farm = None
+    if farm_id:
+        farm = farmer.farms.filter(id=farm_id).first()
+        if not farm:
+            messages.error(request, "Farm not found.")
+            return redirect('farm_registration')
     
     if request.method == 'POST':
         # Try to reverse geocode the coordinates if both are provided
@@ -156,19 +205,82 @@ def farmer_registration(request):
             except (ValueError, TypeError) as e:
                 logger.warning(f"Could not parse GPS coordinates: {str(e)}")
         
-        form = FarmerRegistrationForm(post_data, instance=farmer)
+        form = FarmRegistrationForm(post_data, instance=farm)
         if form.is_valid():
-            farmer = form.save()
+            new_farm = form.save(commit=False)
+            new_farm.farmer = farmer
+            new_farm.save()
             messages.success(request, "Your farm details have been saved successfully!")
             return redirect('dashboard')
     else:
-        # Prefill the form with logged-in user's email
-        initial_data = {
-            'email': request.user.email,
-        }
-        form = FarmerRegistrationForm(initial=initial_data)
+        form = FarmRegistrationForm(instance=farm)
     
-    return render(request, 'registration.html', {'form': form})
+    return render(request, 'farm_registration.html', {
+        'form': form,
+        'farmer': farmer,
+        'farm': farm,
+        'step': 'farm',
+        'title': 'Farm Details Registration',
+        'is_edit': farm is not None
+    })
+
+
+@login_required(login_url='auth')
+def edit_farm_details(request, farm_id):
+    """
+    Edit an existing farm's details.
+    Only accessible to the farmer who owns the farm.
+    """
+    farmer = Farmer.objects.filter(email=request.user.email).first()
+    if not farmer:
+        messages.error(request, "Please complete your farmer profile first.")
+        return redirect('farmer_registration')
+    
+    farm = farmer.farms.filter(id=farm_id).first()
+    if not farm:
+        messages.error(request, "Farm not found.")
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        # Try to reverse geocode the coordinates if both are provided
+        lat = request.POST.get('lat')
+        lon = request.POST.get('long')
+        
+        post_data = request.POST.copy()
+        
+        if lat and lon:
+            try:
+                lat = float(lat)
+                lon = float(lon)
+                geocoded = reverse_geocode_coordinates(lat, lon)
+                
+                if geocoded:
+                    # Auto-fill the administrative divisions from geocoding
+                    if geocoded.get('county') and not post_data.get('county'):
+                        post_data['county'] = geocoded['county']
+                    if geocoded.get('sub_county') and not post_data.get('sub_county'):
+                        post_data['sub_county'] = geocoded['sub_county']
+                    if geocoded.get('ward') and not post_data.get('ward'):
+                        post_data['ward'] = geocoded['ward']
+                    
+                    logger.info(f"Reverse geocoded ({lat}, {lon}) → {geocoded}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse GPS coordinates: {str(e)}")
+        
+        form = FarmRegistrationForm(post_data, instance=farm)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Farm details updated successfully!")
+            return redirect('dashboard')
+    else:
+        form = FarmRegistrationForm(instance=farm)
+    
+    return render(request, 'edit_farm_details.html', {
+        'form': form,
+        'farmer': farmer,
+        'farm': farm,
+        'title': 'Edit Farm Details'
+    })
 
 
 def reverse_geocode_api(request):

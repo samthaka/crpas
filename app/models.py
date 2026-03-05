@@ -73,58 +73,6 @@ class Farmer(models.Model):
         null=True,
         verbose_name="Email (Optional)"
     )
-    lat = models.FloatField(
-        blank=True,
-        null=True,
-        validators=[MinValueValidator(-4.0), MaxValueValidator(5.0)],  # Kenya roughly -4 to 5 lat
-        verbose_name="Latitude",
-        help_text="Field location latitude - auto-captured from device GPS"
-    )
-    long = models.FloatField(
-        blank=True,
-        null=True,
-        validators=[MinValueValidator(33.0), MaxValueValidator(42.0)],  # Kenya roughly 33 to 42 long
-        verbose_name="Longitude",
-        help_text="Field location longitude - auto-captured from device GPS"
-    )
-    county = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        verbose_name="County",
-        help_text="County extracted from GPS coordinates using reverse geocoding"
-    )
-    sub_county = models.CharField(
-        max_length=100,
-        verbose_name="Sub-County",
-        help_text="Sub-county/Constituency of the farm location (e.g., Kasipul, Muhoroni)"
-    )
-    ward = models.CharField(
-        max_length=100,
-        verbose_name="Ward",
-        help_text="Ward/Location of the farm (e.g., Kabar, Chemase)"
-    )
-    gps_accuracy = models.FloatField(
-        blank=True,
-        null=True,
-        verbose_name="GPS Accuracy (meters)",
-        help_text="Accuracy of GPS coordinates in meters"
-    )
-    location_verified = models.BooleanField(
-        default=False,
-        verbose_name="Location Verified",
-        help_text="Indicates if GPS location and admin location have been verified as accurate"
-    )
-    crop_type = models.CharField(
-        max_length=50,
-        choices=[
-            ('maize', 'Maize'),
-            ('beans', 'Beans'),
-            ('maize_beans', 'Maize and Beans (intercropped)'),
-        ],
-        verbose_name="Crop Type",
-        help_text="Only maize, beans, or both allowed"
-    )
     # Conversation history with Gemini – stored as JSON list of dicts: [{"role": "user/system", "content": "..."}]
     gemini_chat_history = models.JSONField(
         default=list,
@@ -142,6 +90,95 @@ class Farmer(models.Model):
     class Meta:
         verbose_name = "Farmer"
         verbose_name_plural = "Farmers"
+        ordering = ['-created_at']
+
+
+class Farm(models.Model):
+    farmer = models.ForeignKey(
+        Farmer,
+        related_name='farms',
+        on_delete=models.CASCADE,
+        help_text="The farmer who owns this farm"
+    )
+    farm_name = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        verbose_name="Farm Name",
+        help_text="Optional name/identifier for this farm (e.g., 'Main Farm', 'North Field')"
+    )
+    crop_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('maize', 'Maize'),
+            ('beans', 'Beans'),
+            ('maize_beans', 'Maize and Beans (intercropped)'),
+        ],
+        verbose_name="Crop Type",
+        help_text="Primary crop type for this farm"
+    )
+    farm_size = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0)],
+        verbose_name="Farm Size (acres)",
+        help_text="Size of the farm in acres"
+    )
+    lat = models.FloatField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(-4.0), MaxValueValidator(5.0)],
+        verbose_name="Latitude",
+        help_text="Farm location latitude - auto-captured from device GPS"
+    )
+    long = models.FloatField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(33.0), MaxValueValidator(42.0)],
+        verbose_name="Longitude",
+        help_text="Farm location longitude - auto-captured from device GPS"
+    )
+    county = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="County",
+        help_text="County extracted from GPS coordinates using reverse geocoding"
+    )
+    sub_county = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Sub-County",
+        help_text="Sub-county/Constituency of the farm location"
+    )
+    ward = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Ward",
+        help_text="Ward/Location of the farm"
+    )
+    gps_accuracy = models.FloatField(
+        blank=True,
+        null=True,
+        verbose_name="GPS Accuracy (meters)",
+        help_text="Accuracy of GPS coordinates in meters"
+    )
+    location_verified = models.BooleanField(
+        default=False,
+        verbose_name="Location Verified",
+        help_text="Indicates if GPS location and admin location have been verified as accurate"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        farm_identifier = self.farm_name or f"Farm at {self.ward}, {self.sub_county}"
+        return f"{self.farmer.fname} {self.farmer.lname} - {farm_identifier}"
+
+    class Meta:
+        verbose_name = "Farm"
+        verbose_name_plural = "Farms"
         ordering = ['-created_at']
 
 

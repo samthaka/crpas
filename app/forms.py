@@ -1,5 +1,5 @@
 from django import forms
-from .models import CustomUser, Farmer
+from .models import CustomUser, Farmer, Farm
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth import get_user_model
 
@@ -118,14 +118,13 @@ class CustomUserCreationForm(UserCreationForm):
         # Add more descriptive help text for password requirements
         self.fields['password1'].help_text = 'Your password must contain at least 8 characters.'
 
-class FarmerRegistrationForm(forms.ModelForm):
+class FarmerProfileForm(forms.ModelForm):
     """
-    Form for farmers to register their plot details and contact information.
-    Uses device GPS for coordinates and requires administrative location (sub-county/ward).
+    Form for farmers to register/edit their personal details.
     """
     class Meta:
         model = Farmer
-        fields = ['fname', 'lname', 'phone', 'email', 'county', 'sub_county', 'ward', 'lat', 'long', 'crop_type']
+        fields = ['fname', 'lname', 'phone', 'email']
         widgets = {
             'fname': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -147,11 +146,54 @@ class FarmerRegistrationForm(forms.ModelForm):
                 'placeholder': 'your.email@example.com',
                 'required': False
             }),
+        }
+
+    def clean(self):
+        """
+        Validate that at least phone number or email is provided.
+        """
+        cleaned_data = super().clean()
+        phone = cleaned_data.get('phone')
+        email = cleaned_data.get('email')
+        
+        # At least one of phone or email must be provided
+        if not phone and not email:
+            raise forms.ValidationError(
+                "Please provide either a phone number or an email address (or both)."
+            )
+        
+        return cleaned_data
+
+
+class FarmRegistrationForm(forms.ModelForm):
+    """
+    Form for farms to register/edit farm details including location and crop type.
+    Uses device GPS for coordinates and requires administrative location (sub-county/ward).
+    """
+    class Meta:
+        model = Farm
+        fields = ['farm_name', 'crop_type', 'farm_size', 'county', 'sub_county', 'ward', 'lat', 'long']
+        widgets = {
+            'farm_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., Main Farm, North Field (optional)',
+                'required': False
+            }),
+            'crop_type': forms.Select(attrs={
+                'class': 'form-control',
+                'required': True
+            }),
+            'farm_size': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter farm size in acres',
+                'step': 'any',
+                'required': True,
+                'min': '0'
+            }),
             'county': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'County will be auto-detected from GPS',
+                'placeholder': 'County (auto-detected from GPS, editable)',
                 'required': False,
-                'readonly': True
             }),
             'sub_county': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -175,24 +217,20 @@ class FarmerRegistrationForm(forms.ModelForm):
                 'step': 'any',
                 'required': False,
             }),
-            'crop_type': forms.Select(attrs={
-                'class': 'form-control',
-                'required': True
-            })
         }
 
     def clean(self):
         """
-        Validate that at least phone number or email is provided.
+        Validate that farm_size is provided and positive.
         """
         cleaned_data = super().clean()
-        phone = cleaned_data.get('phone')
-        email = cleaned_data.get('email')
+        farm_size = cleaned_data.get('farm_size')
         
-        # At least one of phone or email must be provided
-        if not phone and not email:
-            raise forms.ValidationError(
-                "Please provide either a phone number or an email address (or both)."
-            )
+        if farm_size is None or farm_size <= 0:
+            raise forms.ValidationError("Farm size must be greater than 0 acres.")
         
         return cleaned_data
+
+
+# Keep the old form name for backward compatibility during transition
+FarmerRegistrationForm = FarmRegistrationForm
