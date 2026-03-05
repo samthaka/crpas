@@ -155,3 +155,161 @@ class ChatThread(models.Model):
 
     def __str__(self):
         return f"ChatThread for {self.farmer} ({self.created_at:%Y-%m-%d %H:%M})"
+
+
+class NotificationPreference(models.Model):
+    """
+    Stores the notification channel preferences for a farmer.
+    Allows farmers to choose which channels they want to receive notifications on.
+    """
+    farmer = models.OneToOneField(
+        Farmer,
+        related_name='notification_preference',
+        on_delete=models.CASCADE
+    )
+    notify_via_website = models.BooleanField(
+        default=True,
+        help_text="Receive notifications on the website/dashboard"
+    )
+    notify_via_email = models.BooleanField(
+        default=True,
+        help_text="Receive notifications via email"
+    )
+    notify_via_sms = models.BooleanField(
+        default=True,
+        help_text="Receive notifications via SMS"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Notification Preferences for {self.farmer}"
+
+    class Meta:
+        verbose_name = "Notification Preference"
+        verbose_name_plural = "Notification Preferences"
+
+
+class Notification(models.Model):
+    """
+    Stores individual notifications for farmers.
+    Notifications can be triggered by various factors like rainfall, soil moisture, etc.
+    """
+    NOTIFICATION_TYPE_CHOICES = [
+        ('planting_date', 'Planting Date Alert'),
+        ('rainfall', 'Rainfall Alert'),
+        ('dry_spell', 'Dry Spell Warning'),
+        ('soil_moisture', 'Soil Moisture Alert'),
+        ('advisory', 'Advisory/General'),
+    ]
+
+    STATUS_CHOICES = [
+        ('unread', 'Unread'),
+        ('read', 'Read'),
+    ]
+
+    farmer = models.ForeignKey(
+        Farmer,
+        related_name='notifications',
+        on_delete=models.CASCADE
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Short title of the notification"
+    )
+    message = models.TextField(
+        help_text="Detailed notification message"
+    )
+    notification_type = models.CharField(
+        max_length=50,
+        choices=NOTIFICATION_TYPE_CHOICES,
+        default='advisory',
+        help_text="Type of notification"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='unread',
+        help_text="Read status of the notification"
+    )
+    sent_via_website = models.BooleanField(
+        default=False,
+        help_text="Whether notification was sent via website"
+    )
+    sent_via_email = models.BooleanField(
+        default=False,
+        help_text="Whether notification was sent via email"
+    )
+    sent_via_sms = models.BooleanField(
+        default=False,
+        help_text="Whether notification was sent via SMS"
+    )
+    # Additional data stored as JSON (e.g., rainfall amount, soil moisture percentage)
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional metadata related to the notification"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when notification was read"
+    )
+
+    def __str__(self):
+        return f"{self.notification_type.upper()} - {self.farmer}: {self.title}"
+
+    class Meta:
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+        ordering = ['-created_at']
+
+
+class NotificationTriggerLog(models.Model):
+    """
+    Logs trigger events that cause notifications to be sent.
+    Helps track what triggered notifications for monitoring and debugging.
+    """
+    TRIGGER_TYPE_CHOICES = [
+        ('rainfall', 'Rainfall Data'),
+        ('soil_moisture', 'Soil Moisture Data'),
+        ('planting_date', 'Planting Date Check'),
+        ('dry_spell', 'Dry Spell Detection'),
+        ('manual', 'Manual Trigger'),
+    ]
+
+    farmer = models.ForeignKey(
+        Farmer,
+        related_name='trigger_logs',
+        on_delete=models.CASCADE
+    )
+    trigger_type = models.CharField(
+        max_length=50,
+        choices=TRIGGER_TYPE_CHOICES,
+        help_text="Type of trigger that caused the notification"
+    )
+    trigger_data = models.JSONField(
+        help_text="Raw data that triggered the notification"
+    )
+    notification = models.ForeignKey(
+        Notification,
+        related_name='trigger_logs',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The notification that was created from this trigger"
+    )
+    processed = models.BooleanField(
+        default=True,
+        help_text="Whether this trigger has been processed"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.trigger_type.upper()} trigger for {self.farmer} on {self.created_at}"
+
+    class Meta:
+        verbose_name = "Notification Trigger Log"
+        verbose_name_plural = "Notification Trigger Logs"
+        ordering = ['-created_at']

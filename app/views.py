@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import ListView, DetailView
 from django.contrib import messages
 from django.http import JsonResponse
-from .models import Farmer, ChatThread
+from .models import Farmer, ChatThread, Notification
 from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerRegistrationForm
 from django.contrib.auth import authenticate, login, logout, get_user_model
@@ -332,3 +332,195 @@ def delete_chat_view(request, thread_id):
     
     # Redirect to conversation page (loads the most recent remaining chat or creates a new one)
     return redirect('conversation')
+
+
+# ============================================================================
+# NOTIFICATION ENDPOINTS
+# ============================================================================
+
+@login_required(login_url='auth')
+def get_notifications(request):
+    """
+    Get all notifications for the logged-in farmer.
+    Supports filtering by status (read/unread) via query parameter.
+    Returns JSON with list of notifications.
+    """
+    try:
+        farmer = Farmer.objects.filter(email=request.user.email).first()
+        if not farmer:
+            return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    except Farmer.DoesNotExist:
+        return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    
+    # Get filter parameter (unread, read, all)
+    status_filter = request.GET.get('status', 'unread')  # default to unread
+    
+    # Get notifications
+    notifications_query = farmer.notifications.all()
+    
+    if status_filter == 'unread':
+        notifications_query = notifications_query.filter(status='unread')
+    elif status_filter == 'read':
+        notifications_query = notifications_query.filter(status='read')
+    
+    notifications = notifications_query.order_by('-created_at')
+    
+    # Serialize notifications
+    notifications_data = []
+    for notif in notifications:
+        notifications_data.append({
+            'id': notif.id,
+            'title': notif.title,
+            'message': notif.message,
+            'type': notif.notification_type,
+            'status': notif.status,
+            'created_at': notif.created_at.isoformat(),
+            'read_at': notif.read_at.isoformat() if notif.read_at else None,
+            'sent_via': {
+                'website': notif.sent_via_website,
+                'email': notif.sent_via_email,
+                'sms': notif.sent_via_sms,
+            }
+        })
+    
+    return JsonResponse({
+        'status': 'success',
+        'count': notifications_query.count(),
+        'unread_count': farmer.notifications.filter(status='unread').count(),
+        'notifications': notifications_data
+    })
+
+
+@login_required(login_url='auth')
+def mark_notification_as_read(request, notification_id):
+    """
+    Mark a notification as read.
+    """
+    from django.utils import timezone
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests allowed'}, status=400)
+    
+    try:
+        farmer = Farmer.objects.filter(email=request.user.email).first()
+        if not farmer:
+            return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    except Farmer.DoesNotExist:
+        return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    
+    try:
+        notification = farmer.notifications.get(id=notification_id)
+        notification.status = 'read'
+        notification.read_at = timezone.now()
+        notification.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Notification marked as read',
+            'notification_id': notification_id
+        })
+    except Notification.DoesNotExist:
+        return JsonResponse({'error': 'Notification not found'}, status=404)
+
+
+@login_required(login_url='auth')
+def delete_notification(request, notification_id):
+    """
+    Delete a notification.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests allowed'}, status=400)
+    
+    try:
+        farmer = Farmer.objects.filter(email=request.user.email).first()
+        if not farmer:
+            return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    except Farmer.DoesNotExist:
+        return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    
+    try:
+        notification = farmer.notifications.get(id=notification_id)
+        notification.delete()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Notification deleted',
+            'notification_id': notification_id
+        })
+    except Notification.DoesNotExist:
+        return JsonResponse({'error': 'Notification not found'}, status=404)
+
+
+@login_required(login_url='auth')
+def get_notification_preferences(request):
+    """
+    Get the notification preferences for the logged-in farmer.
+    """
+    from .models import NotificationPreference
+    
+    try:
+        farmer = Farmer.objects.filter(email=request.user.email).first()
+        if not farmer:
+            return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    except Farmer.DoesNotExist:
+        return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    
+    try:
+        prefs = farmer.notification_preference
+    except NotificationPreference.DoesNotExist:
+        # Create default preferences if they don't exist
+        prefs = NotificationPreference.objects.create(farmer=farmer)
+    
+    return JsonResponse({
+        'status': 'success',
+        'preferences': {
+            'notify_via_website': prefs.notify_via_website,
+            'notify_via_email': prefs.notify_via_email,
+            'notify_via_sms': prefs.notify_via_sms,
+        }
+    })
+
+
+@login_required(login_url='auth')
+def update_notification_preferences(request):
+    """
+    Update the notification preferences for the logged-in farmer.
+    """
+    from .models import NotificationPreference
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests allowed'}, status=400)
+    
+    try:
+        farmer = Farmer.objects.filter(email=request.user.email).first()
+        if not farmer:
+            return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    except Farmer.DoesNotExist:
+        return JsonResponse({'error': 'Farmer profile not found'}, status=404)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        prefs, _ = NotificationPreference.objects.get_or_create(farmer=farmer)
+        
+        if 'notify_via_website' in data:
+            prefs.notify_via_website = data['notify_via_website']
+        if 'notify_via_email' in data:
+            prefs.notify_via_email = data['notify_via_email']
+        if 'notify_via_sms' in data:
+            prefs.notify_via_sms = data['notify_via_sms']
+        
+        prefs.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Preferences updated',
+            'preferences': {
+                'notify_via_website': prefs.notify_via_website,
+                'notify_via_email': prefs.notify_via_email,
+                'notify_via_sms': prefs.notify_via_sms,
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
