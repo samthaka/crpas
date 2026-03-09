@@ -329,7 +329,24 @@
     </div>
 
     <header>
-        <h1 class="reveal">Crpas</h1>
+        {% comment %} <h1 class="reveal">Crpas</h1> {% endcomment %}
+        <h1 style="position: relative; width: 40%; height: 40px; margin-bottom: 10%;" class="reveal";>
+            <svg viewBox="0 0 100 40" xmlns="http://www.w3.org/2000/svg">
+            <!-- Define a curved path (an arc) -->
+            <!-- The 'd' attribute contains the path data for a quadratic Bezier curve (Q) -->
+            <path id="curvePath" fill="none" d="M 10,30 Q 50,0 90,30" />
+            
+            <!-- Place the text along the path -->
+            <text font-size="10" dominant-baseline="hanging" text-anchor="middle">
+                <!-- Link the text to the path using the href attribute -->
+                <textPath href="#curvePath" startOffset="50%">
+                Crpas
+                </textPath>
+            </text>
+            </svg>
+        </h1>
+        
+
         <p class="hero-tag reveal">Rooted in Earth. Grown by Intelligence.</p>
         {% comment %} <a href="{% url 'conversation' %}" class="cta-button reveal" style="margin-top: 30px;">
             <i class='bx bx-chat-left'></i> Chat with Advisor
