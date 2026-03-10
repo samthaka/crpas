@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from datetime import timedelta
+from django.utils import timezone
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -23,6 +25,26 @@ class CustomUser(AbstractUser):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
     
+    # Email verification fields
+    email_verified = models.BooleanField(
+        default=False,
+        verbose_name="Email Verified",
+        help_text="Indicates whether the user has verified their email address"
+    )
+    email_verification_code = models.CharField(
+        max_length=6,
+        blank=True,
+        null=True,
+        verbose_name="Email Verification Code",
+        help_text="6-digit code sent to user's email for verification"
+    )
+    verification_code_expires_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Verification Code Expiry",
+        help_text="Timestamp when the verification code expires"
+    )
+    
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='customuser_set',
@@ -42,6 +64,14 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.email
+    
+    def is_verification_code_valid(self):
+        """Check if verification code exists and hasn't expired"""
+        if not self.email_verification_code:
+            return False
+        if self.verification_code_expires_at is None:
+            return False
+        return timezone.now() < self.verification_code_expires_at
 
 class Farmer(models.Model):
     fname = models.CharField(

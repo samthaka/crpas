@@ -5,8 +5,15 @@ from django.http import JsonResponse
 from .models import Farmer, Farm, ChatThread, Notification
 from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor, reverse_geocode_coordinates
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerProfileForm, FarmRegistrationForm
+from .models import Farmer, ChatThread
+from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor
+from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerRegistrationForm, EmailVerificationForm
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
+from .email_service import send_verification_email
+from django.utils import timezone
+from datetime import timedelta
+import random
 import logging
 
 logger = logging.getLogger(__name__)
@@ -89,23 +96,32 @@ def auth_view(request):
                     new_user = signup_form.save()
                     logger.info(f"✓ User created: {new_user.email} (ID: {new_user.id})")
                     
-                    # Auto-login the user after signup
-                    email = new_user.email
-                    password = request.POST.get('password1')
-                    logger.info(f"Attempting authentication with email={email}")
+                    # Generate 6-digit verification code
+                    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                    new_user.email_verification_code = verification_code
+                    new_user.verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+                    new_user.save()
                     
-                    user = authenticate(request, username=email, password=password)
-                    logger.info(f"Authentication result: {user}")
+                    logger.info(f"Generated verification code for {new_user.email}: {verification_code}")
                     
-                    if user is not None:
-                        logger.info(f"✓ Authentication successful for {user.email}")
-                        login(request, user)
-                        messages.success(request, "Account created successfully! Now let's set up your farm profile.")
-                        logger.info("Redirecting to farmer registration")
-                        return redirect('farmer_registration')
+                    # Store password in session for later auto-login after verification
+                    request.session['signup_password'] = request.POST.get('password1')
+                    request.session['signup_email'] = new_user.email
+                    
+                    # Send verification email
+                    email_sent = send_verification_email(new_user.email, verification_code)
+                    
+                    if email_sent:
+                        logger.info(f"✓ Verification email sent to {new_user.email}")
+                        messages.success(request, "Account created! Please check your email to verify your account.")
+                        # Redirect to email verification page
+                        return redirect('verify_email')
                     else:
-                        logger.error(f"✗ Authentication failed for {email}")
-                        messages.error(request, "Account created but automatic login failed. Please log in with your credentials.")
+                        logger.error(f"✗ Failed to send verification email to {new_user.email}")
+                        messages.error(request, "Account created but we couldn't send the verification email. Please contact support.")
+                        # Still allow access to verification page to retry
+                        return redirect('verify_email')
+                
                 except Exception as e:
                     logger.exception(f"Exception during signup: {str(e)}")
                     messages.error(request, f"An error occurred during sign up: {str(e)}")
@@ -114,6 +130,118 @@ def auth_view(request):
         'login_form': login_form,
         'signup_form': signup_form
     })
+
+def verify_email(request):
+    """
+    Handles email verification during signup.
+    Users enter the 6-digit code sent to their email to verify their account.
+    """
+    # Get the most recently created unverified user
+    # (assumes single signup flow without multiple attempts)
+    unverified_users = CustomUser.objects.filter(
+        email_verified=False,
+        email_verification_code__isnull=False
+    ).order_by('-date_joined')
+    
+    user = unverified_users.first()
+    
+    if not user:
+        messages.error(request, "No pending verification found. Please sign up first.")
+        return redirect('auth')
+    
+    # Check if verification code has expired
+    if not user.is_verification_code_valid():
+        messages.error(request, "Your verification code has expired. Please sign up again.")
+        user.email_verification_code = None
+        user.verification_code_expires_at = None
+        user.save()
+        return redirect('auth')
+    
+    form = EmailVerificationForm()
+    
+    if request.method == 'POST':
+        form = EmailVerificationForm(request.POST)
+        if form.is_valid():
+            entered_code = form.cleaned_data.get('verification_code')
+            
+            if entered_code == user.email_verification_code:
+                # Mark email as verified
+                user.email_verified = True
+                user.email_verification_code = None
+                user.verification_code_expires_at = None
+                user.save()
+                
+                logger.info(f"✓ Email verified for {user.email}")
+                messages.success(request, "Email verified successfully! You can now log in.")
+                
+                # Auto-login the user after verification using password from session
+                password = request.session.get('signup_password')
+                
+                if password:
+                    authenticated_user = authenticate(request, username=user.email, password=password)
+                    if authenticated_user is not None:
+                        logger.info(f"✓ Auto-login successful after email verification for {user.email}")
+                        login(request, authenticated_user)
+                        # Clean up session
+                        request.session.pop('signup_password', None)
+                        request.session.pop('signup_email', None)
+                        messages.success(request, "Welcome! Let's set up your farm profile.")
+                        return redirect('farmer_registration')
+                
+                # If auto-login with saved password fails, redirect to login
+                messages.info(request, "Please log in with your credentials.")
+                return redirect('auth')
+            else:
+                messages.error(request, "Invalid verification code. Please try again.")
+                logger.warning(f"Invalid verification code attempt for {user.email}")
+                form.add_error('verification_code', 'Code does not match. Please check and try again.')
+    
+    context = {
+        'form': form,
+        'email': user.email,
+        'resend_info': f'A verification code has been sent to {user.email}'
+    }
+    
+    return render(request, 'verify_email.html', context)
+
+def resend_verification_email(request):
+    """
+    Resend the verification email if the user didn't receive the first one.
+    """
+    if request.method != 'POST':
+        return redirect('verify_email')
+    
+    # Get the most recently created unverified user
+    unverified_users = CustomUser.objects.filter(
+        email_verified=False,
+        email_verification_code__isnull=False
+    ).order_by('-date_joined')
+    
+    user = unverified_users.first()
+    
+    if not user:
+        messages.error(request, "No pending verification found.")
+        return redirect('auth')
+    
+    # Regenerate verification code
+    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    user.email_verification_code = verification_code
+    user.verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+    user.save()
+    
+    logger.info(f"Regenerated verification code for {user.email}: {verification_code}")
+    
+    # Send verification email
+    email_sent = send_verification_email(user.email, verification_code)
+    
+    if email_sent:
+        logger.info(f"✓ Verification email resent to {user.email}")
+        messages.success(request, "Verification code resent! Check your email.")
+    else:
+        logger.error(f"✗ Failed to resend verification email to {user.email}")
+        messages.error(request, "Failed to resend verification email. Please try again.")
+    
+    return redirect('verify_email')
 
 def logout_view(request):
     """

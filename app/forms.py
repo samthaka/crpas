@@ -234,3 +234,31 @@ class FarmRegistrationForm(forms.ModelForm):
 
 # Keep the old form name for backward compatibility during transition
 FarmerRegistrationForm = FarmRegistrationForm
+class EmailVerificationForm(forms.Form):
+    """
+    Form for users to enter the 6-digit verification code sent to their email.
+    """
+    verification_code = forms.CharField(
+        label="Verification Code",
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control text-center',
+            'placeholder': '000000',
+            'inputmode': 'numeric',
+            'pattern': '[0-9]{6}',
+            'autocomplete': 'off',
+            'maxlength': '6',
+            'style': 'font-size: 2rem; letter-spacing: 0.5rem; font-weight: bold;'
+        }),
+        help_text='Enter the 6-digit code sent to your email address.'
+    )
+    
+    def clean_verification_code(self):
+        """
+        Validate that the code contains only digits.
+        """
+        code = self.cleaned_data.get('verification_code')
+        if code and not code.isdigit():
+            raise forms.ValidationError("Verification code must contain only numbers.")
+        return code

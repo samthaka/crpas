@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Verify Email - CRPAS{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header text-white" style="background-color: rgb(0, 119, 26)">
+                    <h3 class="mb-0">Verify Your Email</h3>
+                    <p class="mb-0 mt-2" style="font-size: 0.9rem">
+                        Enter the 6-digit code sent to your email
+                    </p>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <div class="text-center mb-4">
+                        <p class="text-muted">
+                            <strong>{{ email }}</strong>
+                        </p>
+                        <p class="text-muted">{{ resend_info }}</p>
+                    </div>
+
+                    <form method="POST" class="needs-validation">
+                        {% csrf_token %}
+
+                        <div class="mb-4">
+                            <label for="{{ form.verification_code.id_for_label }}" class="form-label">
+                                <strong>Verification Code</strong>
+                            </label>
+                            <div class="position-relative">
+                                {{ form.verification_code }}
+                                {% if form.verification_code.errors %}
+                                    <div class="text-danger mt-2" style="font-size: 0.85rem">
+                                        {% for error in form.verification_code.errors %}
+                                            <p class="mb-1">{{ error }}</p>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mb-3">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bx bxs-check-circle"></i> Verify Email
+                            </button>
+                        </div>
+
+                        <div class="text-center">
+                            <p class="text-muted mb-0">
+                                Didn't receive the code?
+                                <form method="POST" action="{% url 'resend_verification' %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-link btn-sm p-0" style="text-decoration: underline;">
+                                        Resend
+                                    </button>
+                                </form>
+                            </p>
+                        </div>
+                    </form>
+
+                    <hr class="my-4">
+
+                    <div class="alert alert-info" role="alert">
+                        <h6 class="mb-2"><i class="bx bxs-info-circle"></i> Need Help?</h6>
+                        <ul class="mb-0" style="font-size: 0.9rem">
+                            <li>Check your spam/junk folder</li>
+                            <li>The code expires in 10 minutes</li>
+                            <li>Enter only the 6 digits (no spaces or dashes)</li>
+                        </ul>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <p class="text-muted mb-0">
+                            <a href="{% url 'auth' %}" class="text-decoration-none">
+                                <i class="bx bx-arrow-back"></i> Back to Login
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Information section -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Why Email Verification?</h6>
+                    <p class="card-text mb-0" style="font-size: 0.9rem">
+                        Email verification ensures that your account is secure and that you have access to 
+                        receive important notifications about your farm and agricultural advice.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #id_verification_code {
+        border: 2px solid #ddd;
+        border-radius: 8px;
+    }
+
+    #id_verification_code:focus {
+        border-color: rgb(0, 119, 26);
+        box-shadow: 0 0 0 0.2rem rgba(0, 119, 26, 0.25);
+    }
+
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+
+    .card-header {
+        border-radius: 10px 10px 0 0;
+    }
+
+    .btn-success {
+        background-color: rgb(0, 119, 26);
+        border-color: rgb(0, 119, 26);
+    }
+
+    .btn-success:hover {
+        background-color: rgb(0, 100, 20);
+        border-color: rgb(0, 100, 20);
+    }
+</style>
+{% endblock %}
