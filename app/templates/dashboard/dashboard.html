@@ -328,29 +328,25 @@
         <div id="notification-list"></div>
     </div>
 
-    <header>
-        {% comment %} <h1 class="reveal">Crpas</h1> {% endcomment %}
-        <h1 style="position: relative; width: 40%; height: 40px; margin-bottom: 10%;" class="reveal";>
-            <svg viewBox="0 0 100 40" xmlns="http://www.w3.org/2000/svg">
-            <!-- Define a curved path (an arc) -->
-            <!-- The 'd' attribute contains the path data for a quadratic Bezier curve (Q) -->
-            <path id="curvePath" fill="none" d="M 10,30 Q 50,0 90,30" />
-            
-            <!-- Place the text along the path -->
-            <text font-size="10" dominant-baseline="hanging" text-anchor="middle">
-                <!-- Link the text to the path using the href attribute -->
-                <textPath href="#curvePath" startOffset="50%">
-                Crpas
-                </textPath>
-            </text>
-            </svg>
-        </h1>
-        
+    <header style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+    <div class="logo-container" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+        <svg width="120" height="120" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="techGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#D4E157; stop-opacity:1" /> <stop offset="100%" style="stop-color:#26A69A; stop-opacity:1" /> </linearGradient>
+            </defs>
+            <path d="M50 10 L85 30 L85 70 L50 90 L15 70 L15 30 Z" fill="none" stroke="url(#techGradient)" stroke-width="8" stroke-linejoin="round"/>
+            <path d="M30 40 L50 30 L70 40 L70 60 L50 70 L30 60 Z" fill="url(#techGradient)" opacity="0.8"/>
+        </svg>
 
-        <p class="hero-tag reveal">Rooted in Earth. Grown by Intelligence.</p>
-        {% comment %} <a href="{% url 'conversation' %}" class="cta-button reveal" style="margin-top: 30px;">
-            <i class='bx bx-chat-left'></i> Chat with Advisor
-        </a> {% endcomment %}
+        <h1 class="reveal" style="margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 10vw; letter-spacing: 7; color: #ffffff;">
+            CR<span style="color: #D4E157;">PAS</span>
+        </h1>
+    </div>
+
+        <p class="hero-tag reveal" style="margin: 0; color: #94a3b8; font-size: 1.5vw; letter-spacing: 2px; text-transform: uppercase; font-weight: 500;">
+        Rooted in Earth. Grown by Intelligence.
+        </p>
     </header>
 
     <div class="container">
