@@ -135,27 +135,58 @@ def verify_email(request):
     """
     Handles email verification during signup.
     Users enter the 6-digit code sent to their email to verify their account.
+    Automatically sends the verification email on first page load if needed.
+    Also handles login flow where user needs to verify email after logging in.
     """
-    # Get the most recently created unverified user
-    # (assumes single signup flow without multiple attempts)
-    unverified_users = CustomUser.objects.filter(
-        email_verified=False,
-        email_verification_code__isnull=False
-    ).order_by('-date_joined')
+    # Get the user being verified from session or database
+    signup_email = request.session.get('signup_email')
+    is_signup_flow = False
     
-    user = unverified_users.first()
+    if signup_email:
+        # User is currently in signup flow
+        user = CustomUser.objects.filter(email=signup_email, email_verified=False).first()
+        is_signup_flow = True
+    else:
+        # User might be accessing from authenticated session (middleware redirected them)
+        if request.user.is_authenticated and not request.user.email_verified:
+            user = request.user
+            is_signup_flow = False
+        else:
+            # No pending verification found
+            messages.error(request, "No pending verification found. Please sign up first.")
+            return redirect('auth')
     
     if not user:
         messages.error(request, "No pending verification found. Please sign up first.")
         return redirect('auth')
     
-    # Check if verification code has expired
+    # Check if verification code has expired or is missing
     if not user.is_verification_code_valid():
-        messages.error(request, "Your verification code has expired. Please sign up again.")
-        user.email_verification_code = None
-        user.verification_code_expires_at = None
-        user.save()
-        return redirect('auth')
+        # If this is a login flow (user logged in but email not verified), regenerate code
+        if not is_signup_flow and request.user.is_authenticated:
+            logger.info(f"Regenerating verification code for logged-in user {user.email}")
+            verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+            user.email_verification_code = verification_code
+            user.verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+            user.save()
+            # Clear the session flag so email gets sent
+            request.session.pop('verification_email_sent', None)
+        else:
+            # This is signup flow with expired code
+            messages.error(request, "Your verification code has expired. Please sign up again.")
+            user.email_verification_code = None
+            user.verification_code_expires_at = None
+            user.save()
+            return redirect('auth')
+    
+    # AUTO-SEND VERIFICATION EMAIL on first GET request (if not already sent or as fallback)
+    if request.method == 'GET' and not request.session.get('verification_email_sent'):
+        email_sent = send_verification_email(user.email, user.email_verification_code)
+        if email_sent:
+            logger.info(f"✓ Verification email sent on page load to {user.email}")
+            request.session['verification_email_sent'] = True
+        else:
+            logger.error(f"✗ Failed to send verification email on page load to {user.email}")
     
     form = EmailVerificationForm()
     
@@ -172,7 +203,7 @@ def verify_email(request):
                 user.save()
                 
                 logger.info(f"✓ Email verified for {user.email}")
-                messages.success(request, "Email verified successfully! You can now log in.")
+                messages.success(request, "Email verified successfully!")
                 
                 # Auto-login the user after verification using password from session
                 password = request.session.get('signup_password')
@@ -185,6 +216,7 @@ def verify_email(request):
                         # Clean up session
                         request.session.pop('signup_password', None)
                         request.session.pop('signup_email', None)
+                        request.session.pop('verification_email_sent', None)
                         messages.success(request, "Welcome! Let's set up your farm profile.")
                         return redirect('farmer_registration')
                 
@@ -211,13 +243,17 @@ def resend_verification_email(request):
     if request.method != 'POST':
         return redirect('verify_email')
     
-    # Get the most recently created unverified user
-    unverified_users = CustomUser.objects.filter(
-        email_verified=False,
-        email_verification_code__isnull=False
-    ).order_by('-date_joined')
+    # Get the user being verified from session or authenticated user
+    signup_email = request.session.get('signup_email')
     
-    user = unverified_users.first()
+    if signup_email:
+        user = CustomUser.objects.filter(email=signup_email, email_verified=False).first()
+    else:
+        if request.user.is_authenticated and not request.user.email_verified:
+            user = request.user
+        else:
+            messages.error(request, "No pending verification found.")
+            return redirect('auth')
     
     if not user:
         messages.error(request, "No pending verification found.")

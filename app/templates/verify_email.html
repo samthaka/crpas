@@ -55,19 +55,19 @@
                                 <i class="bx bxs-check-circle"></i> Verify Email
                             </button>
                         </div>
-
-                        <div class="text-center">
-                            <p class="text-muted mb-0">
-                                Didn't receive the code?
-                                <form method="POST" action="{% url 'resend_verification' %}" style="display: inline;">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-link btn-sm p-0" style="text-decoration: underline;">
-                                        Resend
-                                    </button>
-                                </form>
-                            </p>
-                        </div>
                     </form>
+
+                    <div class="text-center">
+                        <p class="text-muted mb-0">
+                            Didn't receive the code?
+                            <form method="POST" action="{% url 'resend_verification' %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-link btn-sm p-0" style="text-decoration: underline;">
+                                    Resend
+                                </button>
+                            </form>
+                        </p>
+                    </div>
 
                     <hr class="my-4">
 

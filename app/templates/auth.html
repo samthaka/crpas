@@ -25,7 +25,7 @@
     <!-- Background image on the left side -->
     <div class="login-bg-section">
       <div class="login-info">
-        <h3 style="color: #08291a;">Welcome to CRPAS</h3>
+        <h3 style="color: #08291a">Welcome to CRPAS</h3>
         <p>Your trusted agricultural advisory partner</p>
       </div>
       <img
@@ -225,62 +225,37 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
     <script>
-      // Configure Toastr
-      toastr.options = {
-        closeButton: true,
-        progressBar: true,
-        positionClass: "toast-top-right",
-        timeOut: 4000,
-        extendedTimeOut: 2000,
-      };
-
-      // Display Django messages as toasts
-      {% if messages %}
-        {% for message in messages %}
-          var messageText = "{{ message }}";
-          var messageTags = "{{ message.tags }}";
-          
-          // Map Django message tags to Toastr methods
-          if (messageTags.includes("error")) {
-            toastr.error(messageText, "Error!");
-          } else if (messageTags.includes("success")) {
-            toastr.success(messageText, "Success!");
-          } else if (messageTags.includes("warning")) {
-            toastr.warning(messageText, "Warning!");
-          } else {
-            toastr.info(messageText, "Info");
-          }
-        {% endfor %}
-      {% endif %}
-
-      // Function to display form errors as toasts
-      function displayFormErrors(formErrors) {
-        if (formErrors && Object.keys(formErrors).length > 0) {
-          for (const [field, errors] of Object.entries(formErrors)) {
-            if (Array.isArray(errors)) {
-              errors.forEach(function(error) {
-                toastr.error(error, field.charAt(0).toUpperCase() + field.slice(1) + " Error");
-              });
-            }
-          }
-        }
+      // Wait for Toastr to be loaded before configuring
+      if (typeof toastr !== 'undefined') {
+        toastr.options = {
+          closeButton: true,
+          progressBar: true,
+          positionClass: "toast-top-right",
+          timeOut: 4000,
+          extendedTimeOut: 2000,
+        };
       }
 
-      // Check for form errors on page load
-      document.addEventListener("DOMContentLoaded", function() {
-        var loginFormErrors = {% if login_form.non_field_errors or login_form.email.errors or login_form.password.errors %}{
-          "login": "Check your email and password"
-        }{% else %}null{% endif %};
-        
-        var signupFormErrors = {% if signup_form.non_field_errors or signup_form.email.errors or signup_form.password1.errors or signup_form.password2.errors %}{
-          "signup": "Please check the highlighted fields"
-        }{% else %}null{% endif %};
+      // Display Django messages as toasts
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof toastr !== 'undefined') {
+          {% if messages %}
+            {% for message in messages %}
+              var messageText = "{{ message }}";
+              var messageTags = "{{ message.tags }}";
 
-        if (loginFormErrors) {
-          toastr.error("Please check your email and password", "Login Error");
-        }
-        if (signupFormErrors) {
-          toastr.error("Please check the highlighted fields", "Sign Up Error");
+              // Map Django message tags to Toastr methods
+              if (messageTags.includes("error")) {
+                toastr.error(messageText, "Error!");
+              } else if (messageTags.includes("success")) {
+                toastr.success(messageText, "Success!");
+              } else if (messageTags.includes("warning")) {
+                toastr.warning(messageText, "Warning!");
+              } else {
+                toastr.info(messageText, "Info");
+              }
+            {% endfor %}
+          {% endif %}
         }
       });
     </script>

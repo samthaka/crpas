@@ -31,6 +31,16 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS').split(',')
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
+# Email Configuration
+# https://docs.djangoproject.com/en/5.2/topics/email/
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = os.getenv('GMAIL_ADDRESS', '')
+EMAIL_HOST_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('GMAIL_ADDRESS', '')
+
 # CSRF Settings - Ensure proper CSRF token validation
 CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
 CSRF_COOKIE_HTTPONLY = False  # Must be False for JavaScript access to CSRF token
@@ -59,6 +69,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'app.middleware.EmailVerificationMiddleware',  # Check email verification status
 ]
 
 ROOT_URLCONF = 'crpas.urls'
@@ -178,11 +189,4 @@ LOGGING = {
     },
 }
 
-# Email Configuration
-EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@crpas.local')
+# Note: Email configuration is already set above in the correct location

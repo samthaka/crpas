@@ -1,32 +1,24 @@
 """
-Email service for sending verification emails via Gmail SMTP.
-Uses Gmail App Password for authentication (simpler than OAuth2 Service Accounts).
+Email service for sending verification emails via Django's Email Backend.
+Uses Gmail SMTP configured in settings.py
 """
 
-import smtplib
-import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import logging
+from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
-from dotenv import load_dotenv
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Gmail SMTP credentials - get from environment variables
-GMAIL_ADDRESS = os.getenv('GMAIL_ADDRESS', '')
-GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
-
+print("Default from email:", settings.DEFAULT_FROM_EMAIL)
 
 def send_verification_email(recipient_email: str, verification_code: str) -> bool:
     """
-    Send a verification code email to the user via Gmail SMTP.
+    Send a verification code email to the user via Django's Email Backend.
     
     Prerequisites:
     1. Enable 2-Factor Authentication on your Gmail account
     2. Generate an App Password at: https://myaccount.google.com/apppasswords
-    3. Set environment variables:
+    3. Add to .env file:
        - GMAIL_ADDRESS=your-email@gmail.com
        - GMAIL_APP_PASSWORD=your-app-password (16 characters without spaces)
     
@@ -37,20 +29,8 @@ def send_verification_email(recipient_email: str, verification_code: str) -> boo
     Returns:
         bool: True if email sent successfully, False otherwise
     """
-    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
-        logger.error(
-            "Gmail credentials not configured. "
-            "Please set GMAIL_ADDRESS and GMAIL_APP_PASSWORD environment variables."
-        )
-        return False
     
     try:
-        # Create the email message
-        message = MIMEMultipart('alternative')
-        message['to'] = recipient_email
-        message['from'] = GMAIL_ADDRESS
-        message['subject'] = 'CRPAS Email Verification - Verify Your Account'
-        
         # Create HTML email body
         html_body = f"""
         <html>
@@ -108,35 +88,29 @@ CRPAS Team
 Your trusted agricultural advisory partner
         """
         
-        # Attach both plain text and HTML versions
-        message.attach(MIMEText(text_body, 'plain'))
-        message.attach(MIMEText(html_body, 'html'))
+        # Create email message with both plain text and HTML
+        email = EmailMultiAlternatives(
+            subject='CRPAS Email Verification - Verify Your Account',
+            body=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[recipient_email],
+        )
+        email.attach_alternative(html_body, 'text/html')
         
-        # Send via Gmail SMTP
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.send_message(message)
+        # Send the email
+        email.send(fail_silently=False)
         
         logger.info(f"Verification email sent successfully to {recipient_email}")
         return True
     
-    except smtplib.SMTPAuthenticationError:
-        logger.error(
-            f"Gmail authentication failed. Check GMAIL_ADDRESS and GMAIL_APP_PASSWORD. "
-            f"Make sure you're using an App Password, not your regular Gmail password."
-        )
-        return False
-    except smtplib.SMTPException as e:
-        logger.error(f"SMTP error sending verification email: {str(e)}")
-        return False
     except Exception as e:
-        logger.error(f"Unexpected error sending email: {str(e)}")
+        logger.error(f"Failed to send verification email: {str(e)}")
         return False
 
 
 def send_test_email(recipient_email: str) -> bool:
     """
-    Send a test email to verify Gmail SMTP configuration is working.
+    Send a test email to verify Django's email configuration is working.
     
     Args:
         recipient_email (str): The recipient's email address
@@ -144,36 +118,34 @@ def send_test_email(recipient_email: str) -> bool:
     Returns:
         bool: True if email sent successfully, False otherwise
     """
-    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
-        logger.error(
-            "Gmail credentials not configured. "
-            "Please set GMAIL_ADDRESS and GMAIL_APP_PASSWORD environment variables."
-        )
-        return False
     
     try:
-        # Create the email message
-        message = MIMEMultipart('alternative')
-        message['to'] = recipient_email
-        message['from'] = GMAIL_ADDRESS
-        message['subject'] = 'CRPAS Test Email - Configuration Successful'
-        
         html_body = """
         <html>
             <body style="font-family: Arial, sans-serif;">
-                <h2 style="color: #007726;">CRPAS Gmail SMTP Test</h2>
-                <p>If you received this email, the Gmail SMTP configuration is working correctly!</p>
+                <h2 style="color: #007726;">CRPAS Email Configuration Test</h2>
+                <p>If you received this email, the Django email backend is configured correctly!</p>
                 <p>You can now use email notifications in CRPAS.</p>
             </body>
         </html>
         """
         
-        message.attach(MIMEText(html_body, 'html'))
+        text_body = """
+CRPAS Email Configuration Test
+
+If you received this email, the Django email backend is configured correctly!
+You can now use email notifications in CRPAS.
+        """
         
-        # Send via Gmail SMTP
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.send_message(message)
+        email = EmailMultiAlternatives(
+            subject='CRPAS Test Email - Configuration Successful',
+            body=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[recipient_email],
+        )
+        email.attach_alternative(html_body, 'text/html')
+        
+        email.send(fail_silently=False)
         
         logger.info(f"Test email sent successfully to {recipient_email}")
         return True
