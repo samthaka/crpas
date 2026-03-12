@@ -2,19 +2,17 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import ListView, DetailView
 from django.contrib import messages
 from django.http import JsonResponse
-from .models import Farmer, Farm, ChatThread, Notification
-from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor, reverse_geocode_coordinates
-from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerProfileForm, FarmRegistrationForm
-from .models import Farmer, ChatThread
-from .utils import get_rainfall_forecast, get_soil_data, generate_advisory, chat_with_advisor
-from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerRegistrationForm, EmailVerificationForm
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
-from .email_service import send_verification_email
 from django.utils import timezone
 from datetime import timedelta
 import random
 import logging
+
+from .models import Farmer, Farm, ChatThread, Notification
+from .utils import chat_with_advisor, reverse_geocode_coordinates
+from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerProfileForm, FarmRegistrationForm, EmailVerificationForm
+from .email_service import send_verification_email
 
 logger = logging.getLogger(__name__)
 CustomUser = get_user_model()

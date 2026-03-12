@@ -41,6 +41,11 @@ EMAIL_HOST_USER = os.getenv('GMAIL_ADDRESS', '')
 EMAIL_HOST_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('GMAIL_ADDRESS', '')
 
+# APScheduler Configuration for automated task scheduling
+# Runs scheduled tasks like daily advisory notifications
+APSCHEDULER_DATETIME_FORMAT = "N j, Y, g:i a"
+APSCHEDULER_RUN_NOW_TIMEOUT = 25  # seconds to wait for job to start
+
 # CSRF Settings - Ensure proper CSRF token validation
 CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
 CSRF_COOKIE_HTTPONLY = False  # Must be False for JavaScript access to CSRF token
@@ -58,6 +63,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_apscheduler',
     'app',
 ]
 

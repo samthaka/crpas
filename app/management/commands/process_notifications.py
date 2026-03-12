@@ -1,4 +1,4 @@
-﻿"""
+"""
 Django management command to process notification triggers.
 This command checks rainfall, soil moisture, and planting conditions
 and sends notifications to farmers accordingly.

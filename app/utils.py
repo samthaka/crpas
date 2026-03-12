@@ -501,11 +501,11 @@ def get_soil_data(lat, lon):
         return {"error": "Soil data fetch failed", "fallback": "Assume moderate moisture (0.25 m³/m³)"}
 
 
-def generate_advisory(farmer, forecast_data, soil_data):
+def generate_advisory(farm, forecast_data, soil_data):
     """Use Groq with a strong free model for reasoning"""
     client = Groq(api_key=settings.GROQ_API_KEY)
 
-    crop = "maize" if farmer.crop_type == 'maize' else "beans" if farmer.crop_type == 'beans' else "maize and beans intercropped"
+    crop = "maize" if farm.crop_type == 'maize' else "beans" if farm.crop_type == 'beans' else "maize and beans intercropped"
     
     # Format forecast nicely for prompt
     forecast_str = "\n".join([f"{day['date']}: {day['rain_mm']}mm rain (prob {day['prob_max']}%), temp {day['temp_min']}-{day['temp_max']}°C" for day in forecast_data[:10]])
@@ -514,8 +514,8 @@ def generate_advisory(farmer, forecast_data, soil_data):
 You are an expert Kenyan agronomist advising smallholder farmers using local climate logic.
 Your goal is to reduce false-start planting risk.
 
-Farmer: {farmer.fname} {farmer.lname}
-Location: {farmer.lat}, {farmer.long}
+Farmer: {farm.farmer.fname} {farm.farmer.lname}
+Location: {farm.lat}, {farm.long}
 Crop: {crop}
 
 CURRENT SOIL CONDITIONS:
@@ -550,7 +550,7 @@ ANALYZE STEP-BY-STEP:
 OUTPUT RULES:
 - Output ONLY one SMS-style message
 - Start exactly with:
-  "Habari {farmer.fname}! Ushauri wa Kupanda wa CRPAS:"
+  "Habari {farm.farmer.fname}! Ushauri wa Kupanda wa CRPAS:"
 - Use simple English with light simple Kiswahili if helpful
 - Mention specific dates or date ranges
 - Be clear and decisive (Plant / Wait and When to plant)
@@ -579,8 +579,8 @@ OUTPUT RULES:
             # Groq/chat API uses 'assistant' for model responses
             {"role": "assistant", "content": advisory}
         ]
-        farmer.gemini_chat_history.extend(new_entry)  # Reuse field name or rename later
-        farmer.save()
+        farm.farmer.gemini_chat_history.extend(new_entry)  # Reuse field name or rename later
+        farm.farmer.save()
 
         return advisory
     except Exception as e:
