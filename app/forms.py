@@ -222,12 +222,21 @@ class FarmRegistrationForm(forms.ModelForm):
     def clean(self):
         """
         Validate that farm_size is provided and positive.
+        And ensure sub_county and ward are provided.
         """
         cleaned_data = super().clean()
         farm_size = cleaned_data.get('farm_size')
+        sub_county = cleaned_data.get('sub_county')
+        ward = cleaned_data.get('ward')
         
         if farm_size is None or farm_size <= 0:
             raise forms.ValidationError("Farm size must be greater than 0 acres.")
+        
+        if not sub_county or not sub_county.strip():
+            raise forms.ValidationError("Sub-County is required. Please enter your sub-county or select it from the list.")
+        
+        if not ward or not ward.strip():
+            raise forms.ValidationError("Ward is required. Please enter your ward or select it from the list.")
         
         return cleaned_data
 

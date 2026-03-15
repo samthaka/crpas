@@ -251,6 +251,144 @@ def validate_ward_in_constituency(ward_name, constituency_name):
         return None
 
 
+def geocode_from_location(county, sub_county=None, ward=None):
+    """
+    Forward geocode Kenya administrative location names to GPS coordinates.
+    Uses Nominatim (OpenStreetMap) - free API, no key required.
+    Tries multiple search strategies with fallback options.
+    
+    Args:
+        county: County name (required, e.g., "Kisii County" or "Kisii")
+        sub_county: Sub-county/Constituency name (optional, e.g., "Kisii Central")
+        ward: Ward name (optional, e.g., "Nyaribari Chache")
+    
+    Returns:
+        Dict with 'lat' and 'lon' keys, or None if geocoding fails
+        Example: {'lat': 0.6234, 'lon': 35.2891, 'source': 'nominatim'}
+    """
+    if not county:
+        logger.warning("[ADVISOR DEBUG] geocode_from_location: No county provided")
+        return None
+    
+    # Normalize county name (ensure "County" suffix is present)
+    county_normalized = remove_county_suffix(county).strip()
+    if not county_normalized.endswith(' County'):
+        county_normalized = county_normalized + ' County'
+    
+    # Build multiple search strategies (most specific to least specific)
+    search_queries = []
+    
+    # Strategy 1: Full address with ward, sub_county, and county
+    if ward and sub_county:
+        search_queries.append(f"{ward}, {sub_county}, {county_normalized}, Kenya")
+    
+    # Strategy 2: Sub_county and county (for constituency-level geocoding)
+    if sub_county:
+        search_queries.append(f"{sub_county}, {county_normalized}, Kenya")
+    
+    # Strategy 3: Ward and county (skip sub_county)
+    if ward:
+        search_queries.append(f"{ward}, {county_normalized}, Kenya")
+    
+    # Strategy 4: Just the county
+    search_queries.append(f"{county_normalized}, Kenya")
+    
+    for search_location in search_queries:
+        try:
+            logger.info(f"[ADVISOR DEBUG] Attempting geocoding: {search_location}")
+            
+            # Nominatim API endpoint for forward geocoding
+            url = "https://nominatim.openstreetmap.org/search"
+            params = {
+                'q': search_location,
+                'format': 'json',
+                'limit': 1,
+                'accept-language': 'en'
+            }
+            
+            # Add User-Agent as required by Nominatim
+            headers = {
+                'User-Agent': 'CRPAS-AgriculturalAdvisor/1.0'
+            }
+            
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            results = response.json()
+            
+            if results:
+                # Get the first (most relevant) result
+                result = results[0]
+                lat = float(result['lat'])
+                lon = float(result['lon'])
+                
+                logger.info(f"[ADVISOR DEBUG] Successfully geocoded '{search_location}' → lat={lat:.6f}, lon={lon:.6f}")
+                return {'lat': lat, 'lon': lon, 'source': 'nominatim', 'query': search_location}
+            else:
+                logger.debug(f"[ADVISOR DEBUG] Nominatim returned no results for: {search_location}")
+                continue
+        
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"[ADVISOR DEBUG] Nominatim timeout for '{search_location}': {str(e)}")
+            continue
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"[ADVISOR DEBUG] Nominatim connection error for '{search_location}': {str(e)}")
+            continue
+        except Exception as e:
+            logger.warning(f"[ADVISOR DEBUG] Nominatim error for '{search_location}': {type(e).__name__}: {str(e)}")
+            continue
+    
+    # If all Nominatim queries failed, try hardcoded fallback coordinates for major Kenya counties
+    logger.warning(f"[ADVISOR DEBUG] Nominatim geocoding failed for all search queries. Checking hardcoded fallback coordinates.")
+    fallback_coords = get_county_fallback_coordinates(county_normalized)
+    if fallback_coords:
+        logger.info(f"[ADVISOR DEBUG] Using fallback coordinates for {county_normalized}: lat={fallback_coords['lat']}, lon={fallback_coords['lon']}")
+        return fallback_coords
+    
+    logger.error(f"[ADVISOR DEBUG] Geocoding failed completely for county: {county_normalized}")
+    return None
+
+
+def get_county_fallback_coordinates(county_name):
+    """
+    Hardcoded fallback coordinates for major Kenyan counties.
+    Used when Nominatim API fails or doesn't return results.
+    
+    Args:
+        county_name: County name (e.g., "Kisii County")
+    
+    Returns:
+        Dict with 'lat', 'lon', 'source' keys, or None if not found
+    """
+    # Approximate center coordinates for major Kenya counties
+    county_coords = {
+        'Kisii County': {'lat': -0.683, 'lon': 34.758},
+        'Kisii': {'lat': -0.683, 'lon': 34.758},
+        'Nyanza': {'lat': -0.5, 'lon': 34.3},
+        'Western': {'lat': -0.2, 'lon': 34.5},
+        'Nairobi': {'lat': -1.286, 'lon': 36.818},
+        'Nakuru': {'lat': -0.303, 'lon': 36.070},
+        'Rift Valley': {'lat': 0.0, 'lon': 35.5},
+        'Coast': {'lat': -4.0, 'lon': 39.3},
+        'Eastern': {'lat': -0.5, 'lon': 39.0},
+        'Central': {'lat': -0.5, 'lon': 36.5},
+        'North Eastern': {'lat': 1.0, 'lon': 39.5},
+    }
+    
+    # Try exact match first
+    for key, coords in county_coords.items():
+        if key.lower() == county_name.lower():
+            return {'lat': coords['lat'], 'lon': coords['lon'], 'source': 'fallback'}
+    
+    # Try partial match
+    county_lower = county_name.lower()
+    for key, coords in county_coords.items():
+        if key.lower() in county_lower or county_lower in key.lower():
+            logger.info(f"[ADVISOR DEBUG] Matched '{county_name}' to fallback '{key}'")
+            return {'lat': coords['lat'], 'lon': coords['lon'], 'source': 'fallback'}
+    
+    return None
+
+
 def reverse_geocode_coordinates(lat, lon):
     """
     Reverse geocode GPS coordinates to extract Kenya administrative divisions.
@@ -456,9 +594,12 @@ def get_rainfall_forecast(lat, lon, days=10):
         "forecast_days": days,
     }
     try:
+        logger.info(f"[ADVISOR DEBUG] Fetching rainfall forecast from Open-Meteo: lat={lat}, lon={lon}, days={days}")
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
+        logger.info(f"[ADVISOR DEBUG] Open-Meteo API response status: {response.status_code}, data keys: {list(data.keys())}")
+        
         # Simplify: list of dates with rain mm, prob, temps
         forecast = []
         for i in range(len(data['daily']['time'])):
@@ -469,8 +610,17 @@ def get_rainfall_forecast(lat, lon, days=10):
                 "temp_max": data['daily']['temperature_2m_max'][i],
                 "temp_min": data['daily']['temperature_2m_min'][i],
             })
+        logger.info(f"[ADVISOR DEBUG] Rainfall forecast successfully retrieved: {len(forecast)} days of forecast data")
+        logger.debug(f"[ADVISOR DEBUG] Forecast sample: {forecast[0] if forecast else 'NO DATA'}")
         return forecast
+    except requests.exceptions.Timeout as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo API TIMEOUT: {str(e)}")
+        return {"error": f"Timeout: {str(e)}"}
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo API CONNECTION ERROR: {str(e)}")
+        return {"error": f"Connection error: {str(e)}"}
     except Exception as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo API ERROR: {type(e).__name__}: {str(e)}")
         return {"error": str(e)}
 
 def get_soil_data(lat, lon):
@@ -485,11 +635,24 @@ def get_soil_data(lat, lon):
         "forecast_days": 1,  # current + short forecast
     }
     try:
-        response = requests.get(url, params=params)
+        logger.info(f"[ADVISOR DEBUG] Fetching soil data from Open-Meteo: lat={lat}, lon={lon}")
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
         data = response.json()
+        logger.info(f"[ADVISOR DEBUG] Open-Meteo soil API response status: {response.status_code}, data keys: {list(data.keys())}")
+        
+        if 'hourly' not in data:
+            logger.error(f"[ADVISOR DEBUG] Open-Meteo soil response missing 'hourly' key. Available keys: {list(data.keys())}")
+            return {"error": "Invalid response format", "response_keys": list(data.keys())}
+        
+        if not data['hourly']['time']:
+            logger.error(f"[ADVISOR DEBUG] Open-Meteo soil response has no time data")
+            return {"error": "No time data in response"}
+        
         latest_hour = data['hourly']['time'][0]  # most recent
         idx = 0  # first (current)
-        return {
+        
+        result = {
             "soil_moisture_top": data['hourly']['soil_moisture_0_to_1cm'][idx],
             "soil_moisture_mid": data['hourly']['soil_moisture_9_to_27cm'][idx],
             "soil_moisture_deep": data['hourly']['soil_moisture_27_to_81cm'][idx],
@@ -497,8 +660,23 @@ def get_soil_data(lat, lon):
             "soil_temp_mid": data['hourly']['soil_temperature_18cm'][idx],
             "timestamp": latest_hour,
         }
-    except:
-        return {"error": "Soil data fetch failed", "fallback": "Assume moderate moisture (0.25 m³/m³)"}
+        logger.info(f"[ADVISOR DEBUG] Soil data successfully retrieved: moisture_top={result['soil_moisture_top']}, timestamp={latest_hour}")
+        return result
+    except requests.exceptions.Timeout as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo soil API TIMEOUT: {str(e)}")
+        return {"error": f"Timeout: {str(e)}"}
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo soil API CONNECTION ERROR: {str(e)}")
+        return {"error": f"Connection error: {str(e)}"}
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo soil API HTTP ERROR: {response.status_code} - {str(e)}")
+        return {"error": f"HTTP {response.status_code}: {str(e)}"}
+    except KeyError as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo soil response missing expected key: {str(e)}. Response structure: {list(data.keys()) if 'data' in locals() else 'No data'}")
+        return {"error": f"Missing key in response: {str(e)}"}
+    except Exception as e:
+        logger.error(f"[ADVISOR DEBUG] Open-Meteo soil API ERROR: {type(e).__name__}: {str(e)}")
+        return {"error": f"Soil data fetch failed: {str(e)}", "fallback": "Assume moderate moisture (0.25 m³/m³)"}
 
 
 def generate_advisory(farm, forecast_data, soil_data):
@@ -551,7 +729,7 @@ OUTPUT RULES:
 - Output ONLY one SMS-style message
 - Start exactly with:
   "Habari {farm.farmer.fname}! Ushauri wa Kupanda wa CRPAS:"
-- Use simple English with light simple Kiswahili if helpful
+- Use simple English with very light simple Kiswahili if helpful
 - Mention specific dates or date ranges
 - Be clear and decisive (Plant / Wait and When to plant)
 - Keep an open tone, avoid technical jargon, and be encouraging
@@ -591,6 +769,7 @@ def chat_with_advisor(farm, chat_thread, user_message):
     """
     Handle conversational chat with the advisor about farming topics.
     Uses Groq to maintain context across multiple messages in the current chat thread.
+    Includes REAL-TIME weather and soil data for accurate, data-driven recommendations.
     Only sends the system prompt + messages from the current chat thread to avoid context bloat.
     
     Args:
@@ -606,33 +785,129 @@ def chat_with_advisor(farm, chat_thread, user_message):
     farmer = farm.farmer
     crop = "maize" if farm.crop_type == 'maize' else "beans" if farm.crop_type == 'beans' else "maize and beans (intercropped)"
     
-    # Build system prompt with farm context
+    # Build location string with administrative divisions (these ARE known)
+    location_parts = []
+    if farm.county:
+        location_parts.append(farm.county + " County")
+    if farm.sub_county:
+        location_parts.append(farm.sub_county)
+    if farm.ward:
+        location_parts.append(farm.ward)
+    location_str = ", ".join(location_parts) if location_parts else "Location not specified"
+    
+    # Fetch real-time weather and soil data for DATA-DRIVEN advice
+    # Try to get GPS coordinates: first from farm data, then by geocoding location
+    forecast_data = None
+    soil_data = None
+    gps_note = ""
+    actual_lat = farm.lat
+    actual_lon = farm.long
+    
+    # If GPS is missing, try to geocode from administrative location
+    if not actual_lat or not actual_lon:
+        if farm.county:
+            logger.info(f"[ADVISOR DEBUG] Farm {farm.id} missing GPS, attempting geocoding from location: {location_str}")
+            geocoded = geocode_from_location(farm.county, farm.sub_county, farm.ward)
+            if geocoded:
+                actual_lat = geocoded['lat']
+                actual_lon = geocoded['lon']
+                logger.info(f"[ADVISOR DEBUG] Geocoding successful: {location_str} → lat={actual_lat:.6f}, lon={actual_lon:.6f}")
+            else:
+                logger.warning(f"[ADVISOR DEBUG] Geocoding failed for {location_str}. Will use regional patterns only.")
+        else:
+            logger.warning(f"[ADVISOR DEBUG] Farm {farm.id} has neither GPS coordinates nor administrative location. Unable to fetch real-time data.")
+    
+    # Now fetch weather/soil data if we have coordinates (either from farm or geocoding)
+    if actual_lat and actual_lon:
+        logger.info(f"[ADVISOR DEBUG] Farm has GPS coordinates (lat={actual_lat}, lon={actual_lon}), fetching real-time data")
+        forecast_data = get_rainfall_forecast(actual_lat, actual_lon, days=10)
+        soil_data = get_soil_data(actual_lat, actual_lon)
+        
+        # Log data fetch results
+        if isinstance(forecast_data, dict) and 'error' in forecast_data:
+            logger.error(f"[ADVISOR DEBUG] Rainfall forecast API failed: {forecast_data['error']}")
+        else:
+            logger.info(f"[ADVISOR DEBUG] Rainfall forecast retrieved successfully: {len(forecast_data)} days")
+        
+        if isinstance(soil_data, dict) and 'error' in soil_data:
+            logger.error(f"[ADVISOR DEBUG] Soil data API failed: {soil_data['error']}")
+        else:
+            logger.info(f"[ADVISOR DEBUG] Soil data retrieved successfully")
+        
+        gps_note = f"(GPS: {actual_lat:.6f}, {actual_lon:.6f})"
+    else:
+        logger.warning(f"[ADVISOR DEBUG] Farm {farm.id} has no GPS coordinates and geocoding unavailable. Using administrative location only: {location_str}")
+        gps_note = "(GPS coordinates not available - using regional seasonal patterns for context)"
+    
+    # Format forecast for prompt
+    forecast_str = "Real-time weather data unavailable - GPS coordinates needed for precise forecasting"
+    if forecast_data and isinstance(forecast_data, list) and len(forecast_data) > 0:
+        forecast_str = "\n".join([f"  {day['date']}: {day['rain_mm']}mm rain (prob {day['prob_max']}%), temp {day['temp_min']}-{day['temp_max']}°C" for day in forecast_data[:10]])
+        logger.info(f"[ADVISOR DEBUG] Using real-time forecast data with {len(forecast_data)} days")
+    else:
+        logger.warning(f"[ADVISOR DEBUG] Could not use forecast data (type={type(forecast_data)}, content={forecast_data if not isinstance(forecast_data, dict) else 'dict with error'}). Using fallback message.")
+    
+    # Format soil data for prompt
+    soil_str = "Real-time soil data unavailable - GPS coordinates needed for precise readings"
+    if isinstance(soil_data, dict) and 'error' not in soil_data and soil_data:
+        soil_str = f"""Top layer: {soil_data.get('soil_moisture_top', 'N/A')} m³/m³
+  Mid layer: {soil_data.get('soil_moisture_mid', 'N/A')} m³/m³
+  Deep layer: {soil_data.get('soil_moisture_deep', 'N/A')} m³/m³
+  Surface temp: {soil_data.get('soil_temp_surface', 'N/A')}°C"""
+        logger.info(f"[ADVISOR DEBUG] Using real-time soil data: moisture_top={soil_data.get('soil_moisture_top')}")
+    else:
+        logger.warning(f"[ADVISOR DEBUG] Could not use soil data (type={type(soil_data)}, content={soil_data if not isinstance(soil_data, dict) else 'dict with error'}). Using fallback message.")
+    
+    # Build system prompt with REAL-TIME farm context and weather/soil data
     system_prompt = f"""You are a friendly and knowledgeable Kenyan agricultural advisor helping farmers improve their farming practices.
 
-Farmer Profile:
+FARMER & FARM PROFILE:
 - Name: {farmer.fname} {farmer.lname}
 - Farm: {farm.farm_name or "Unnamed farm"}
 - Farm Size: {farm.farm_size} acres
-- Location: {farm.lat}, {farm.long}
-- County: {farm.county or "Not specified"}
-- Sub-county: {farm.sub_county or "Not specified"}
-- Ward: {farm.ward or "Not specified"}
+- Location: {location_str} {gps_note}
 - Primary Crops: {crop}
+- Today's Date: {datetime.now().strftime('%Y-%m-%d')}
 
-Your role is to provide practical, localized farming advice about:
-1. Crop selection and suitability for their location
-2. Planting and harvesting times
-3. Pest and disease management (especially for maize and beans)
-4. Soil health and water management
-5. Yield improvement techniques
-6. Post-harvest handling
+CURRENT REAL-TIME CONDITIONS:
+Soil Moisture:
+{soil_str}
+
+10-Day Weather Forecast:
+{forecast_str}
+
+LOCATION CONTEXT:
+This farm is in {location_str}, which is in Kenya. Use this regional knowledge to inform your advice about:
+- Typical rainfall patterns for this region/season
+- Common pests and diseases in this area
+- Appropriate crop varieties for this geography
+- Water availability and management practices
+
+CRITICAL RULES FOR PLANTING RECOMMENDATIONS:
+When answering YES/NO planting questions:
+- If real-time data available: Base decision on ACTUAL weather and soil moisture data
+- If real-time data unavailable: Use regional seasonal patterns for {location_str}
+  * Generally: Long rains March-May, Short rains Sept-Nov in Kenya
+  * For Maize: Plant when soil is moist, needs 20-30mm rain over 5-7 days
+  * For Beans: More flexible, needs 15-20mm rain over ~5 days
+- Always consider current season and typical weather for the location
+- Advise AGAINST planting if risk of false-start (rain followed by long dry spell)
+
+Your role is to provide practical, location-aware farming advice about:
+1. Planting decisions (yes/no) based on available data + regional knowledge
+2. Crop selection and suitability for {location_str}
+3. Best planting windows based on today's season and forecast (if available)
+4. Pest and disease management for {location_str}
+5. Soil health and water management strategies
+6. Yield improvement techniques for this region
+7. Post-harvest handling
 
 Guidelines:
-- Keep responses friendly and in simple language (English or light Kiswahili mix is fine)
-- Give practical, actionable advice that smallholder farmers can implement
-- Consider Kenya's climate and local farming practices
+- Keep responses friendly and in simple language (English or light Kiswahili)
+- Give practical, actionable advice smallholder farmers can implement
 - Be encouraging and supportive
-- If uncertain, suggest they check with local agricultural extension officers
+- If uncertain, suggest checking with local agricultural extension officers in {location_str}
+- Be transparent about data limitations: mention if you're using seasonal patterns vs real-time data
 - Keep responses concise and focused on the question asked"""
 
     # Get only the conversation history from this specific chat thread
@@ -663,8 +938,19 @@ Guidelines:
     api_messages = [{"role": "system", "content": system_prompt}] + conversation_history
     
     try:
-        # debug: log message sequence before request
-        logger.debug(f"Sending messages to Groq API for chat thread {chat_thread.id}: {len(api_messages)} messages")
+        # Log comprehensive debug info about what data is being sent
+        has_forecast = forecast_data and isinstance(forecast_data, list) and len(forecast_data) > 0
+        has_soil = soil_data and isinstance(soil_data, dict) and 'error' not in soil_data
+        data_sources = []
+        if has_forecast:
+            data_sources.append(f"forecast({len(forecast_data)} days)")
+        if has_soil:
+            data_sources.append(f"soil({soil_data.get('soil_moisture_top')}m³/m³)")
+        data_status = ", ".join(data_sources) if data_sources else "no real-time data (using regional patterns)"
+        
+        logger.info(f"[ADVISOR DEBUG] Sending to Groq API: chat_thread={chat_thread.id}, farmer={farmer.fname}, location={location_str}, data_sources=[{data_status}], total_messages={len(api_messages)}")
+        logger.debug(f"[ADVISOR DEBUG] System prompt length: {len(system_prompt)} chars")
+        
         chat_completion = client.chat.completions.create(
             messages=api_messages,
             model="llama-3.3-70b-versatile",
@@ -673,6 +959,7 @@ Guidelines:
         )
         
         advisor_response = chat_completion.choices[0].message.content.strip()
+        logger.info(f"[ADVISOR DEBUG] Groq API responded successfully: {len(advisor_response)} chars")
         
         # Save the exchange to the current chat thread's history (not farmer history)
         conversation_history.append({
@@ -685,4 +972,5 @@ Guidelines:
         return advisor_response
     
     except Exception as e:
+        logger.error(f"[ADVISOR DEBUG] Groq API ERROR: {type(e).__name__}: {str(e)}")
         return f"Sorry, I encountered an error processing your message: {str(e)}"

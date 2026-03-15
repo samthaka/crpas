@@ -77,14 +77,13 @@ CRPAS{% endblock %} {% block navbar_link %}
             <small class="text-muted d-block mb-1">
               <i class="bx bx-ruler"></i> {{ farm.farm_size }} acres
             </small>
-            {% endif %} {% if farm.county %}
-            <small class="text-muted d-block mb-1">
-              <i class="bx bx-map"></i> {{ farm.county }} County
-            </small>
-            {% endif %} {% if farm.sub_county %}
+            {% endif %} 
+            {% if farm.sub_county %}
             <small class="text-muted d-block">
-              <i class="bx bx-map-pin"></i> {{ farm.sub_county }}, {{ farm.ward
-              }}
+              <i class="bx bx-map-pin"></i> {{ farm.sub_county }}
+              {% if farm.ward %},
+                {{ farm.ward }}
+              {% endif %}
             </small>
             {% endif %}
           </div>

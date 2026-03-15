@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.views.generic import ListView, DetailView
 from django.contrib import messages
 from django.http import JsonResponse
@@ -445,17 +446,22 @@ def verify_phone(request):
                 logger.info(f"✓ Phone verified for {user.phone}")
                 messages.success(request, "Phone verified successfully!")
                 
+                # Log the user in
+                user.backend = 'app.backends.EmailBackend'
+                login(request, user)
+                
+                request.session.pop('verification_sms_sent', None)
+                
                 if is_phone_signup:
-                    # This is a signup flow - redirect to set password
+                    # This is a signup flow - redirect to farmer registration
                     request.session.pop('is_phone_signup', None)
-                    request.session.pop('verification_sms_sent', None)
-                    return redirect('phone_signup_password')
+                    request.session['phone_signup'] = True  # Flag for farmer registration to prefill phone
+                    logger.info(f"✓ Phone signup successful for {user.phone}, redirecting to farmer registration")
+                    messages.success(request, "Welcome! Let's set up your farm profile.")
+                    return redirect('farmer_registration')
                 else:
-                    # This is a login flow - log the user in
-                    user.backend = 'app.backends.EmailBackend'
-                    login(request, user)
+                    # This is a login flow
                     request.session.pop('auth_phone', None)
-                    request.session.pop('verification_sms_sent', None)
                     logger.info(f"✓ Login successful for {user.phone}")
                     messages.success(request, "Logged in successfully!")
                     return redirect('dashboard')
@@ -567,37 +573,166 @@ def logout_view(request):
     return redirect('auth')
 
 @login_required(login_url='auth')
-@login_required(login_url='auth')
 def farmer_registration(request):
     """
     Step 1: Handle farmer profile registration/editing.
     Creates or updates the Farmer profile with personal details (fname, lname, phone, email).
-    After completion, redirects to farm_registration for farm details.
+    For phone-signup users: prefills phone, email is optional
+    For email-signup users: email is already filled, email and phone optional
+    After completion: 
+    - If email provided and not verified: redirect to email verification
+    - Otherwise: redirect to farm_registration
     """
     # Get or create farmer profile for the logged-in user
     farmer = Farmer.objects.filter(email=request.user.email).first()
+    
+    # Check if this is a phone signup flow
+    is_phone_signup = request.session.get('phone_signup', False)
     
     if request.method == 'POST':
         form = FarmerProfileForm(request.POST, instance=farmer)
         if form.is_valid():
             farmer = form.save(commit=False)
-            # Ensure email matches the logged-in user
+            # Ensure farmer email matches the logged-in user email
             farmer.email = request.user.email
+            
+            # Check if user provided an email address
+            form_email = form.cleaned_data.get('email')
+            
             farmer.save()
+            logger.info(f"✓ Farmer profile saved for {request.user.email}")
             messages.success(request, "Your profile has been saved successfully!")
-            return redirect('farm_registration')
+            
+            # If this is a phone signup user and they provided an email, verify it
+            if is_phone_signup and form_email:
+                # Clear the phone_signup flag
+                request.session.pop('phone_signup', None)
+                
+                # Check if the email they provided is different from their account email
+                if form_email != request.user.email:
+                    # Update the account with this email as their actual email
+                    request.user.email = form_email
+                    request.user.save()
+                    logger.info(f"✓ Updated phone signup user account email to {form_email}")
+                
+                # Generate verification code for the email
+                verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                request.user.email_verification_code = verification_code
+                request.user.verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+                request.user.save()
+                
+                logger.info(f"Generated email verification code for {form_email}: {verification_code}")
+                
+                # Store info in session for email verification
+                request.session['farmer_email_verification'] = form_email
+                request.session['verification_email_sent'] = False
+                
+                # Send verification email
+                email_sent = send_verification_email(form_email, verification_code)
+                
+                if email_sent:
+                    logger.info(f"✓ Verification email sent to {form_email}")
+                    messages.info(request, f"A verification code has been sent to {form_email}. Please verify to continue.")
+                    return redirect('verify_farmer_email')
+                else:
+                    logger.error(f"✗ Failed to send verification email to {form_email}")
+                    messages.warning(request, "Could not send verification email. Continuing without email verification.")
+                    return redirect('farm_registration')
+            else:
+                # No email provided or not a phone signup - go straight to farm registration
+                request.session.pop('phone_signup', None)
+                return redirect('farm_registration')
     else:
-        # Prefill the form with logged-in user's email
-        initial_data = {
-            'email': request.user.email,
-        }
+        # Prefill the form
+        initial_data = {}
+        
+        # For phone signup users, prefill the phone from their account
+        if is_phone_signup and request.user.phone:
+            initial_data['phone'] = request.user.phone
+        
+        # Always prefill email with the account email
+        initial_data['email'] = request.user.email
+        
         form = FarmerProfileForm(instance=farmer, initial=initial_data)
     
-    return render(request, 'registration.html', {
+    context = {
         'form': form,
         'step': 'farmer',
-        'title': 'Farmer Profile Registration'
-    })
+        'title': 'Farmer Profile Registration',
+        'is_phone_signup': is_phone_signup
+    }
+    
+    return render(request, 'registration.html', context)
+
+
+@login_required(login_url='auth')
+def verify_farmer_email(request):
+    """
+    Handles email verification for farmer registration.
+    This is shown when a phone-signup farmer adds an email address during registration.
+    """
+    farmer_email = request.session.get('farmer_email_verification')
+    
+    if not farmer_email:
+        messages.error(request, "No pending email verification found.")
+        return redirect('farmer_registration')
+    
+    user = request.user
+    
+    # Check if verification code exists and hasn't expired
+    if not user.is_verification_code_valid():
+        logger.warning(f"Verification code expired or missing for {farmer_email}")
+        # Regenerate code
+        verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        user.email_verification_code = verification_code
+        user.verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+        user.save()
+        request.session.pop('verification_email_sent', None)
+    
+    # AUTO-SEND VERIFICATION EMAIL on first GET request
+    if request.method == 'GET' and not request.session.get('verification_email_sent'):
+        email_sent = send_verification_email(farmer_email, user.email_verification_code)
+        if email_sent:
+            logger.info(f"✓ Verification email sent on page load to {farmer_email}")
+            request.session['verification_email_sent'] = True
+        else:
+            logger.error(f"✗ Failed to send verification email on page load to {farmer_email}")
+    
+    form = EmailVerificationForm()
+    
+    if request.method == 'POST':
+        form = EmailVerificationForm(request.POST)
+        if form.is_valid():
+            entered_code = form.cleaned_data.get('verification_code')
+            
+            if entered_code == user.email_verification_code:
+                # Mark email as verified
+                user.email_verified = True
+                user.email_verification_code = None
+                user.verification_code_expires_at = None
+                user.save()
+                
+                logger.info(f"✓ Email verified for {farmer_email}")
+                messages.success(request, f"Email {farmer_email} verified successfully!")
+                
+                # Clean up session
+                request.session.pop('farmer_email_verification', None)
+                request.session.pop('verification_email_sent', None)
+                
+                # Redirect to farm registration
+                return redirect('farm_registration')
+            else:
+                messages.error(request, "Invalid verification code. Please try again.")
+                logger.warning(f"Invalid email verification code attempt for {farmer_email}")
+                form.add_error('verification_code', 'Code does not match. Please check and try again.')
+    
+    context = {
+        'form': form,
+        'email': farmer_email,
+        'resend_info': f'A verification code has been sent to {farmer_email}'
+    }
+    
+    return render(request, 'verify_email.html', context)
 
 
 @login_required(login_url='auth')
@@ -852,24 +987,41 @@ def new_chat_view(request):
     """
     Create a new chat thread for the logged-in farmer.
     """
-    try:
-        farmer = Farmer.objects.filter(phone=request.user.email).first() or Farmer.objects.first()
-    except Farmer.DoesNotExist:
-        messages.error(request, "Please complete your farmer registration first.")
-        return redirect('farmer_registration')
+    # Get farmer profile for the logged-in user
+    farmer = Farmer.objects.filter(email=request.user.email).first()
     
     if not farmer:
         messages.error(request, "Please complete your farmer registration first.")
         return redirect('farmer_registration')
     
-    # Create a new chat thread
+    # Get farmer's farms
+    farms = farmer.farms.all()
+    if not farms.exists():
+        messages.error(request, "Please register at least one farm first.")
+        return redirect('farm_registration')
+    
+    # Get the selected farm - either from query param or the first farm (default)
+    farm_id = request.GET.get('farm_id')
+    if farm_id:
+        farm = farms.filter(id=farm_id).first()
+        if not farm:
+            messages.error(request, "Farm not found.")
+            return redirect('conversation')
+    else:
+        # Default to the first farm
+        farm = farms.first()
+    
+    # Create a new chat thread associated with the farm
     chat_thread = ChatThread.objects.create(
         farmer=farmer,
+        farm=farm,
         title='New chat',
         history=[]
     )
     
-    return redirect('conversation')
+    # Redirect to conversation with the new thread ID
+    url = reverse('conversation') + f'?thread_id={chat_thread.id}&farm_id={farm.id}'
+    return redirect(url)
 
 @login_required(login_url='auth')
 def delete_chat_view(request, thread_id):

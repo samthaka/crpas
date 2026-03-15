@@ -1,4 +1,5 @@
-﻿{% extends 'base.html' %} {% load static %} {% block title %}Farm Registration - CRPAS{% endblock %} {% block content %}
+﻿{% extends 'base.html' %} {% load static %} {% block title %}Farm Registration -
+CRPAS{% endblock %} {% block content %}
 <div class="container mt-5">
   <div class="row justify-content-center">
     <div class="col-md-8">
@@ -42,7 +43,8 @@
               </label>
               {{ form.farm_name }}
               <small class="form-text text-muted d-block mt-1"
-                >e.g., "Main Farm", "North Field" - use this if you manage multiple farms</small
+                >e.g., "Main Farm", "North Field" - use this if you manage
+                multiple farms</small
               >
               {% if form.farm_name.errors %}
               <div class="text-danger mt-1" style="font-size: 0.85rem">
@@ -63,18 +65,65 @@
             </div>
 
             <!-- GPS Fields (Hidden but still submitted) -->
-            <div style="display: none;">
-              {{ form.lat }}
-              {{ form.long }}
+            <div style="display: none">{{ form.lat }} {{ form.long }}</div>
+
+            <!-- Manual GPS Entry Fallback (shown if auto-capture fails) -->
+            <div
+              class="alert alert-warning d-none"
+              id="gpsManualFallback"
+              style="margin-bottom: 1.5rem"
+            >
+              <i class="fas fa-exclamation-circle"></i>
+              <strong>GPS Auto-Capture Failed</strong><br />
+              <p class="mb-2">
+                Unable to get your location automatically. You can manually
+                enter your GPS coordinates below:
+              </p>
+              <div class="row">
+                <div class="col-md-6 mb-2">
+                  <label for="manualLat" class="form-label">Latitude</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="manualLat"
+                    placeholder="-1.2345"
+                    step="0.000001"
+                    min="-4"
+                    max="5"
+                  />
+                  <small class="text-muted">e.g., -1.2345</small>
+                </div>
+                <div class="col-md-6 mb-2">
+                  <label for="manualLon" class="form-label">Longitude</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="manualLon"
+                    placeholder="34.5678"
+                    step="0.000001"
+                    min="33"
+                    max="42"
+                  />
+                  <small class="text-muted">e.g., 34.5678</small>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-primary"
+                onclick="submitManualGPS()"
+              >
+                <i class="fas fa-check"></i> Confirm Coordinates
+              </button>
+              <p class="mb-0 mt-2" style="font-size: 0.85rem">
+                <strong>Don't know your GPS?</strong> You can find it using
+                Google Maps on your phone.
+              </p>
             </div>
 
             <!-- Administrative Location Section -->
             <div class="row">
               <div class="col-md-4 mb-3">
-                <label
-                  for="{{ form.county.id_for_label }}"
-                  class="form-label"
-                >
+                <label for="{{ form.county.id_for_label }}" class="form-label">
                   County
                 </label>
                 {{ form.county }}
@@ -154,7 +203,10 @@
 
             <div class="row">
               <div class="col-md-6 mb-3">
-                <label for="{{ form.crop_type.id_for_label }}" class="form-label">
+                <label
+                  for="{{ form.crop_type.id_for_label }}"
+                  class="form-label"
+                >
                   Crop Type <span class="text-danger">*</span>
                 </label>
                 {{ form.crop_type }}
@@ -169,7 +221,10 @@
               </div>
 
               <div class="col-md-6 mb-3">
-                <label for="{{ form.farm_size.id_for_label }}" class="form-label">
+                <label
+                  for="{{ form.farm_size.id_for_label }}"
+                  class="form-label"
+                >
                   Farm Size (acres) <span class="text-danger">*</span>
                 </label>
                 {{ form.farm_size }}
@@ -241,16 +296,22 @@
 
   .card-header {
     border-radius: 0.75rem 0.75rem 0 0;
-    background: linear-gradient(135deg, rgb(0, 119, 26) 0%, rgba(0, 119, 26, 0.9) 100%);
+    background: linear-gradient(
+      135deg,
+      rgb(0, 119, 26) 0%,
+      rgba(0, 119, 26, 0.9) 100%
+    );
   }
 
-  .form-control, .form-select {
+  .form-control,
+  .form-select {
     border-color: #e0e0e0;
     border-radius: 0.5rem;
     transition: all 0.3s ease;
   }
 
-  .form-control:focus, .form-select:focus {
+  .form-control:focus,
+  .form-select:focus {
     border-color: rgb(0, 119, 26);
     box-shadow: 0 0 0 0.2rem rgba(0, 119, 26, 0.15);
     transform: translateY(-2px);
@@ -403,29 +464,31 @@
     });
   });
 
-  function showGPSNotification(title, message, type = 'info') {
+  function showGPSNotification(title, message, type = "info") {
     // Remove any existing notification
-    const existing = document.querySelector('.gps-notification');
+    const existing = document.querySelector(".gps-notification");
     if (existing) {
       existing.remove();
     }
 
-    const notification = document.createElement('div');
+    const notification = document.createElement("div");
     notification.className = `gps-notification ${type}`;
-    
-    const titleEl = document.createElement('div');
-    titleEl.className = 'gps-notification-title';
-    
-    if (type === 'info') {
-      titleEl.innerHTML = '<i class="fas fa-spinner fa-spin gps-notification-spinner"></i> ' + title;
-    } else if (type === 'success') {
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "gps-notification-title";
+
+    if (type === "info") {
+      titleEl.innerHTML =
+        '<i class="fas fa-spinner fa-spin gps-notification-spinner"></i> ' +
+        title;
+    } else if (type === "success") {
       titleEl.innerHTML = '<i class="fas fa-check-circle"></i> ' + title;
-    } else if (type === 'error') {
+    } else if (type === "error") {
       titleEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + title;
     }
 
-    const textEl = document.createElement('p');
-    textEl.className = 'gps-notification-text';
+    const textEl = document.createElement("p");
+    textEl.className = "gps-notification-text";
     textEl.textContent = message;
 
     notification.appendChild(titleEl);
@@ -433,9 +496,9 @@
     document.body.appendChild(notification);
 
     // Auto-remove after 5 seconds for success/error
-    if (type !== 'info') {
+    if (type !== "info") {
       setTimeout(() => {
-        notification.classList.add('fade-out');
+        notification.classList.add("fade-out");
         setTimeout(() => notification.remove(), 400);
       }, 4000);
     }
@@ -445,16 +508,41 @@
 
   function getDeviceLocation() {
     const gpsStatus = document.getElementById("gpsStatus");
-    const latField = document.getElementById("lat-field");
-    const longField = document.getElementById("long-field");
 
-    if (!gpsStatus || !latField || !longField) {
-      console.warn("GPS form fields not found");
+    // Try to find lat/long fields by ID (with expected Django auto-generated names)
+    let latField = document.getElementById("lat-field");
+    let longField = document.getElementById("long-field");
+
+    // Fallback: try Django's default field IDs
+    if (!latField) latField = document.getElementById("id_lat");
+    if (!longField) longField = document.getElementById("id_long");
+
+    // Fallback: try to find by name attribute
+    if (!latField) latField = document.querySelector('input[name="lat"]');
+    if (!longField) longField = document.querySelector('input[name="long"]');
+
+    if (!latField || !longField) {
+      console.error(
+        "GPS form fields not found. lat-field ID:",
+        latField,
+        "long-field ID:",
+        longField,
+      );
+      showGPSNotification(
+        "Setup Error",
+        "GPS fields not found in form. Please refresh the page.",
+        "error",
+      );
       return;
     }
 
+    console.log("Found lat field:", latField, "long field:", longField);
+
     // Show notification that location is being captured
-    showGPSNotification('Location Detection', 'Detecting your device location...');
+    showGPSNotification(
+      "Location Detection",
+      "Detecting your device location...",
+    );
 
     if (navigator.geolocation) {
       const options = {
@@ -468,22 +556,38 @@
           const latitude = position.coords.latitude;
           const longitude = position.coords.longitude;
 
+          console.log("GPS Position captured:", latitude, longitude);
+
           // Set form field values
           latField.value = latitude.toFixed(6);
           longField.value = longitude.toFixed(6);
 
+          console.log(
+            "Form fields updated - lat:",
+            latField.value,
+            "long:",
+            longField.value,
+          );
+
           // Show updating notification
-          showGPSNotification('Detecting', 'Auto-filling location details...');
+          showGPSNotification("Detecting", "Auto-filling location details...");
 
           // Call reverse geocoding API
-          fetch('{% url "reverse_geocode_api" %}?lat=' + latitude + '&lon=' + longitude)
-            .then(response => response.json())
-            .then(data => {
-              console.log('Geocoding API response:', data);
-              if (data.status === 'success') {
+          fetch(
+            '{% url "reverse_geocode_api" %}?lat=' +
+              latitude +
+              "&lon=" +
+              longitude,
+          )
+            .then((response) => response.json())
+            .then((data) => {
+              console.log("Geocoding API response:", data);
+              if (data.status === "success") {
                 // Auto-fill the location fields
                 const countyField = document.querySelector('[name="county"]');
-                const subCountyField = document.querySelector('[name="sub_county"]');
+                const subCountyField = document.querySelector(
+                  '[name="sub_county"]',
+                );
                 const wardField = document.querySelector('[name="ward"]');
 
                 if (data.data.county && countyField) {
@@ -497,44 +601,194 @@
                 }
 
                 // Show success notification
-                showGPSNotification('Location Detected', 'Your location has been auto-filled successfully!', 'success');
+                showGPSNotification(
+                  "Location Detected",
+                  "Your location has been auto-filled successfully! Lat: " +
+                    latitude.toFixed(4) +
+                    ", Lon: " +
+                    longitude.toFixed(4),
+                  "success",
+                );
               } else {
                 // Geocoding failed
-                showGPSNotification('Location Detected', 'Location detected, but details could not be auto-filled. You can enter them manually.', 'success');
+                showGPSNotification(
+                  "Location Detected",
+                  "Location detected at " +
+                    latitude.toFixed(4) +
+                    ", " +
+                    longitude.toFixed(4) +
+                    ". Details could not be auto-filled. You can enter them manually.",
+                  "success",
+                );
               }
             })
-            .catch(error => {
-              console.error('Geocoding error:', error);
-              showGPSNotification('Location Detected', 'Location detected, but an error occurred during auto-fill.', 'success');
+            .catch((error) => {
+              console.error("Geocoding error:", error);
+              showGPSNotification(
+                "Location Detected",
+                "Location detected at " +
+                  latitude.toFixed(4) +
+                  ", " +
+                  longitude.toFixed(4) +
+                  ". An error occurred during auto-fill.",
+                "success",
+              );
             });
         },
         function (error) {
           let errorMessage = "Unable to get GPS location.";
-          let errorType = 'error';
-          
+          let errorType = "error";
+
           switch (error.code) {
             case error.PERMISSION_DENIED:
-              errorMessage = "GPS permission denied. Enable location access.";
+              errorMessage =
+                "GPS permission denied. Enable location access in your browser settings.";
               break;
             case error.POSITION_UNAVAILABLE:
-              errorMessage = "GPS position unavailable. Need clear sky view.";
+              errorMessage =
+                "GPS position unavailable. Need clear sky view or enable Location Services.";
               break;
             case error.TIMEOUT:
-              errorMessage = "GPS request timed out. Please try again.";
+              errorMessage =
+                "GPS request timed out. Please try again or enter coordinates manually.";
               break;
           }
 
-          showGPSNotification('Location Error', errorMessage, errorType);
+          console.warn("Geolocation error:", error.code, errorMessage);
+          showGPSNotification("Location Error", errorMessage, errorType);
+
+          // Show manual fallback option
+          const manualFallback = document.getElementById("gpsManualFallback");
+          if (manualFallback) {
+            manualFallback.classList.remove("d-none");
+          }
         },
         options,
       );
     } else {
-      showGPSNotification('Not Supported', 'Geolocation is not supported by your browser.', 'error');
+      showGPSNotification(
+        "Not Supported",
+        "Geolocation is not supported by your browser. Please enter your GPS coordinates manually.",
+        "error",
+      );
+      // Show manual fallback option
+      const manualFallback = document.getElementById("gpsManualFallback");
+      if (manualFallback) {
+        manualFallback.classList.remove("d-none");
+      }
+    }
+  }
+
+  function submitManualGPS() {
+    const manualLat = document.getElementById("manualLat");
+    const manualLon = document.getElementById("manualLon");
+
+    if (!manualLat.value || !manualLon.value) {
+      alert("Please enter both latitude and longitude values.");
+      return;
+    }
+
+    try {
+      const lat = parseFloat(manualLat.value);
+      const lon = parseFloat(manualLon.value);
+
+      if (isNaN(lat) || isNaN(lon)) {
+        alert("Please enter valid numerical coordinates.");
+        return;
+      }
+
+      if (lat < -4 || lat > 5) {
+        alert("Latitude must be between -4 and 5 for Kenya.");
+        return;
+      }
+
+      if (lon < 33 || lon > 42) {
+        alert("Longitude must be between 33 and 42 for Kenya.");
+        return;
+      }
+
+      // Find hidden form fields and set values
+      let latField =
+        document.getElementById("lat-field") ||
+        document.getElementById("id_lat") ||
+        document.querySelector('input[name="lat"]');
+      let longField =
+        document.getElementById("long-field") ||
+        document.getElementById("id_long") ||
+        document.querySelector('input[name="long"]');
+
+      if (latField && longField) {
+        latField.value = lat.toFixed(6);
+        longField.value = lon.toFixed(6);
+        console.log(
+          "Manual GPS set - lat:",
+          latField.value,
+          "long:",
+          longField.value,
+        );
+      }
+
+      // Call reverse geocoding API
+      fetch('{% url "reverse_geocode_api" %}?lat=' + lat + "&lon=" + lon)
+        .then((response) => response.json())
+        .then((data) => {
+          console.log("Geocoding API response:", data);
+          if (data.status === "success") {
+            // Auto-fill the location fields
+            const countyField = document.querySelector('[name="county"]');
+            const subCountyField = document.querySelector(
+              '[name="sub_county"]',
+            );
+            const wardField = document.querySelector('[name="ward"]');
+
+            if (data.data.county && countyField) {
+              countyField.value = data.data.county;
+            }
+            if (data.data.sub_county && subCountyField) {
+              subCountyField.value = data.data.sub_county;
+            }
+            if (data.data.ward && wardField) {
+              wardField.value = data.data.ward;
+            }
+
+            showGPSNotification(
+              "Coordinates Saved",
+              "Your GPS coordinates and location details have been saved!",
+              "success",
+            );
+            // Hide manual fallback
+            document
+              .getElementById("gpsManualFallback")
+              .classList.add("d-none");
+          } else {
+            showGPSNotification(
+              "Coordinates Saved",
+              "GPS coordinates saved. Location details could not be auto-filled.",
+              "success",
+            );
+            document
+              .getElementById("gpsManualFallback")
+              .classList.add("d-none");
+          }
+        })
+        .catch((error) => {
+          console.error("Geocoding error:", error);
+          showGPSNotification(
+            "Coordinates Saved",
+            "GPS coordinates saved, but location auto-fill failed.",
+            "success",
+          );
+          document.getElementById("gpsManualFallback").classList.add("d-none");
+        });
+    } catch (e) {
+      console.error("Error processing manual GPS:", e);
+      alert("Error processing coordinates: " + e.message);
     }
   }
 </script>
 
-{% comment %} <style>
+{% comment %}
+<style>
   .section-title {
     margin-top: 1.5rem;
   }
@@ -576,5 +830,5 @@
   .form-check-label {
     margin-left: 0.5rem;
   }
-</style> {% endcomment %}
-{% endblock %}
+</style>
+{% endcomment %} {% endblock %}

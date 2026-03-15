@@ -6,7 +6,12 @@ from . views import (
     get_notifications, mark_notification_as_read, delete_notification,
     get_notification_preferences, update_notification_preferences
 )
-from . views import auth_view, index_redirect, dashboard, logout_view, farmer_registration, reverse_geocode_api, conversation_view, new_chat_view, delete_chat_view, verify_email, resend_verification_email, phone_auth, verify_phone, resend_verification_sms, phone_signup_password
+from . views import (
+    auth_view, index_redirect, dashboard, logout_view, farmer_registration, 
+    reverse_geocode_api, conversation_view, new_chat_view, delete_chat_view, 
+    verify_email, resend_verification_email, phone_auth, verify_phone, 
+    resend_verification_sms, phone_signup_password, verify_farmer_email
+)
 
 urlpatterns = [
     path('', index_redirect, name='index'),
@@ -18,6 +23,7 @@ urlpatterns = [
     path('resend-sms/', resend_verification_sms, name='resend_sms'),
     path('phone-signup-password/', phone_signup_password, name='phone_signup_password'),
     path('farmer-registration/', farmer_registration, name='farmer_registration'),
+    path('verify-farmer-email/', verify_farmer_email, name='verify_farmer_email'),
     path('farm-registration/', farm_registration, name='farm_registration'),
     path('farm/<int:farm_id>/edit/', edit_farm_details, name='edit_farm_details'),
     path('api/reverse-geocode/', reverse_geocode_api, name='reverse_geocode_api'),

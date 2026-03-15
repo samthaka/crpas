@@ -15,7 +15,7 @@ from .models import Notification, NotificationPreference, NotificationTriggerLog
 logger = logging.getLogger(__name__)
 
 # SMS Gateway Configuration
-SMS_GATEWAY_URL = "http://192.168.13.105:8080"
+SMS_GATEWAY_URL = settings.SMS_GATEWAY_URL
 SMS_TIMEOUT = 10  # seconds
 
 

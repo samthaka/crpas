@@ -31,6 +31,8 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS').split(',')
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
+SMS_GATEWAY_URL = os.getenv('SMS_GATEWAY_URL')
+
 # Email Configuration
 # https://docs.djangoproject.com/en/5.2/topics/email/
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -50,9 +52,19 @@ APSCHEDULER_RUN_NOW_TIMEOUT = 25  # seconds to wait for job to start
 CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
 CSRF_COOKIE_HTTPONLY = False  # Must be False for JavaScript access to CSRF token
 CSRF_COOKIE_SAMESITE = 'Lax'  # Allow CSRF token to be sent with same-site requests
+
 # Build CSRF_TRUSTED_ORIGINS with proper schemes
 _allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-CSRF_TRUSTED_ORIGINS = [f'http://{host.strip()}' for host in _allowed_hosts]
+CSRF_TRUSTED_ORIGINS = []
+for host in _allowed_hosts:
+    host = host.strip()
+    if not host.startswith(('http://', 'https://')):
+        # Add both http and https for hosts without a scheme
+        CSRF_TRUSTED_ORIGINS.append(f'http://{host}')
+        CSRF_TRUSTED_ORIGINS.append(f'https://{host}')
+    else:
+        # Keep hosts that already have a scheme
+        CSRF_TRUSTED_ORIGINS.append(host)
 
 # Application definition
 
@@ -63,8 +75,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',  # Required by django-allauth
     'django_apscheduler',
     'app',
+    
+    # django-allauth apps
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 ]
 
 MIDDLEWARE = [
@@ -76,6 +95,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'app.middleware.EmailVerificationMiddleware',  # Check email verification status
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'crpas.urls'
@@ -90,6 +110,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # Required by allauth to access request in templates
+                'django.template.context_processors.request',
             ],
         },
     },
@@ -103,8 +125,12 @@ WSGI_APPLICATION = 'crpas.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv("DB_NAME"),
+        'USER': os.getenv("DB_USER"),
+        'PASSWORD': os.getenv("DB_PASSWORD"),
+        'HOST': os.getenv("DB_HOST"),
+        'PORT': os.getenv("DB_PORT", "5432"),
     }
 }
 
@@ -157,14 +183,57 @@ AUTH_USER_MODEL = 'app.CustomUser'
 
 # Custom Authentication Backend
 AUTHENTICATION_BACKENDS = [
+    # Needed to login by username in Django admin, regardless of `allauth`
+    'django.contrib.auth.backends.ModelBackend',
+    
+    # `allauth` specific authentication methods, such as login by e-mail
+    'allauth.account.auth_backends.AuthenticationBackend',
+    
+    # Custom email backend
     'app.backends.EmailBackend',
-    'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
 ]
 
 # Login/Logout settings
 LOGIN_URL = 'auth'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'auth'
+
+# Django-allauth settings
+SITE_ID = 1
+
+# Account settings
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_EMAIL_VERIFICATION = 'optional'  # Don't require email verification for social accounts
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+
+# Social account settings
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'APP': {
+            'client_id': os.getenv('GOOGLE_OAUTH2_CLIENT_ID', ''),
+            'secret': os.getenv('GOOGLE_OAUTH2_CLIENT_SECRET', ''),
+            'key': '',
+        },
+        'VERIFIED_EMAIL': False,
+        'VERSION': 'v2',
+    }
+}
+
+# Auto-connect user on signup if possible (useful for social accounts)
+SOCIALACCOUNT_AUTO_SIGNUP = True
+
+# Adapter to customize social account behavior
+SOCIALACCOUNT_ADAPTER = 'app.adapters.SocialAccountAdapter'
 
 # Logging configuration for debugging
 LOGGING = {

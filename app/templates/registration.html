@@ -63,16 +63,22 @@
             <!-- Contact Information Section -->
             <div class="section-title mt-4 mb-3">
               <h5 class="form-section-title">Contact Information</h5>
-              <small class="text-muted"
-                >Please provide at least one contact method (phone or
-                email)</small
-              >
+              {% if is_phone_signup %}
+                <small class="text-muted">
+                  Your phone number is already registered. Email is optional.
+                </small>
+              {% else %}
+                <small class="text-muted">
+                  Please provide at least one contact method (phone or email)
+                </small>
+              {% endif %}
             </div>
 
             <div class="row">
               <div class="col-md-6 mb-3">
                 <label for="{{ form.phone.id_for_label }}" class="form-label">
                   Phone Number
+                  {% if not is_phone_signup %}<span class="text-danger">*</span>{% endif %}
                 </label>
                 {{ form.phone }}
                 <small class="form-text text-muted d-block mt-1"
@@ -87,14 +93,26 @@
 
               <div class="col-md-6 mb-3">
                 <label for="{{ form.email.id_for_label }}" class="form-label">
-                  Email Address
+                  Email Address (Optional)
                 </label>
-                {{ form.email }} {% if form.email.errors %}
+                {{ form.email }}
+                <small class="form-text text-muted d-block mt-1"
+                  >If you add an email, you'll need to verify it</small
+                >
+                {% if form.email.errors %}
                 <div class="text-danger mt-1" style="font-size: 0.85rem">
                   {{ form.email.errors }}
                 </div>
                 {% endif %}
               </div>
+            </div>
+
+            <!-- Email Verification Notice -->
+            <div class="alert alert-info alert-dismissible fade show" role="alert" id="emailVerificationNotice" style="display: none;">
+              <i class="fas fa-info-circle"></i>
+              <strong>Email Verification Required</strong><br>
+              <small>You've provided an email address. After saving your profile, you'll need to verify it by entering a 6-digit code we'll send to that address.</small>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
 
             <!-- Non-field Errors -->
@@ -763,4 +781,32 @@
     }
   }
 
+  // Show email verification notice when email is provided
+  document.addEventListener("DOMContentLoaded", function () {
+    const emailField = document.querySelector('input[name="email"]');
+    const emailNotice = document.getElementById("emailVerificationNotice");
+    
+    if (emailField && emailNotice) {
+      emailField.addEventListener("change", function () {
+        if (this.value.trim()) {
+          emailNotice.style.display = "block";
+        } else {
+          emailNotice.style.display = "none";
+        }
+      });
+      
+      emailField.addEventListener("input", function () {
+        if (this.value.trim()) {
+          emailNotice.style.display = "block";
+        } else {
+          emailNotice.style.display = "none";
+        }
+      });
+      
+      // Check initial value
+      if (emailField.value.trim()) {
+        emailNotice.style.display = "block";
+      }
+    }
+  });
 </script>
