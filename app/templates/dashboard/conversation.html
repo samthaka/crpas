@@ -1,384 +1,480 @@
-﻿{% extends "base.html" %}
-{% load static %}
-
-{% block title %}Chat with Advisor - CRPAS{% endblock %}
-
-{% block navbar_link %}
+﻿{% extends "base.html" %} {% load static %} {% block title %}Chat with Advisor -
+CRPAS{% endblock %} {% block navbar_link %}
 <a href="{% url 'dashboard' %}" class="nav-link">
-  <i class='bx bx-arrow-back'></i> Back to Dashboard
+  <i class="bx bx-arrow-back"></i> Back to Dashboard
 </a>
-{% endblock %}
-
-{% block content %}
+{% endblock %} {% block content %}
 <div class="container-fluid p-4">
-    <div class="row h-100">
-        <!-- Sidebar with Farmer Info and Chat History -->
-        <div class="col-md-3 bg-light d-flex flex-column" style="max-height: calc(100vh - 80px); overflow-y: auto;">
-            <!-- New Chat Button -->
-            <div>
-                <a href="{% url 'new_chat' %}" class="btn btn-success btn-lg w-100 mb-3">
-                    <i class='bx bx-plus'></i> New Chat
-                </a>
-           </div>
+  <div class="row h-100">
+    <!-- Sidebar with Farmer Info and Chat History -->
+    <div
+      class="col-md-3 bg-light d-flex flex-column"
+      style="max-height: calc(100vh - 80px); overflow-y: auto"
+    >
+      <!-- New Chat Button -->
+      <div>
+        <a
+          href="{% url 'new_chat' %}"
+          class="btn btn-success btn-lg w-100 mb-3"
+        >
+          <i class="bx bx-plus"></i> New Chat
+        </a>
+      </div>
 
-            <!-- Farmer Profile Card -->
-            <div class="card mb-4 border-0 shadow-sm">
-                <div class="card-body">
-                    <h6 class="card-title fw-bold text-success mb-3">
-                        <i class='bx bx-user'></i> Your Profile
-                    </h6>
-                    <div class="profile-info">
-                        <p class="mb-2"><strong>{{ farmer.fname }} {{ farmer.lname }}</strong></p>
-                        <small class="text-muted d-block mb-2">
-                            <i class='bx bx-phone'></i> {{ farmer.phone }}
-                        </small>
-                        <small class="text-muted d-block mb-2">
-                            <i class='bx bx-leaf'></i> {{ farmer.get_crop_type_display }}
-                        </small>
-                        {% if farmer.county %}
-                        <small class="text-muted d-block mb-2">
-                            <i class='bx bx-map'></i> {{ farmer.county }} County
-                        </small>
-                        {% endif %}
-                        <small class="text-muted d-block mb-2">
-                            <i class='bx bx-map-pin'></i> {{ farmer.sub_county }}, {{ farmer.ward }}
-                        </small>
-                    </div>
-                </div>
-            </div>
+      <!-- Farmer Profile Card -->
+      <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title fw-bold text-success mb-3">
+            <i class="bx bx-user"></i> Your Profile
+          </h6>
+          <div class="profile-info">
+            <p class="mb-2">
+              <strong>{{ farmer.fname }} {{ farmer.lname }}</strong>
+            </p>
+            <small class="text-muted d-block mb-2">
+              <i class="bx bx-phone"></i> {{ farmer.phone }}
+            </small>
+          </div>
+        </div>
+      </div>
 
-            <!-- Recent Chats Section -->
-            {% if chat_threads %}
-            <div class="mb-4">
-                <h6 class="fw-bold text-success mb-3">
-                    <i class='bx bx-history'></i> Recent Chats
-                </h6>
-                <div class="chat-threads-list">
-                    {% for thread in chat_threads %}
-                    <div class="chat-thread-item mb-2 p-2 rounded d-flex justify-content-between align-items-center {% if thread.id == active_thread_id %}active-thread{% endif %}" style="background-color: {% if thread.id == active_thread_id %}#d4edda{% else %}#f8f9fa{% endif %}; cursor: pointer; transition: all 0.3s; border-left: 4px solid {% if thread.id == active_thread_id %}#28a745{% else %}#ddd{% endif %}; flex-wrap: wrap;">
-                        <a href="{% url 'conversation' %}?thread_id={{ thread.id }}" class="text-decoration-none flex-grow-1" style="min-width: 0;">
-                            <p class="mb-1 small fw-bold" style="color: {% if thread.id == active_thread_id %}#28a745{% else %}#333{% endif %}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                {{ thread.title|truncatewords:4 }}
-                            </p>
-                            <small class="text-muted d-block">
-                                {{ thread.updated_at|date:"M d, H:i" }}
-                            </small>
-                        </a>
-                        <button class="btn btn-sm btn-danger delete-chat-btn ms-2" data-thread-id="{{ thread.id }}" type="button" style="padding: 4px 8px; font-size: 12px;" title="Delete chat">
-                            <i class='bx bx-trash'></i>
-                        </button>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+      <!-- Farm Selector Dropdown -->
+      {% if farms %}
+      <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title fw-bold text-success mb-3">
+            <i class="bx bx-leaf"></i> Your Farms
+          </h6>
+          <div class="farm-selector">
+            <select
+              id="farm-selector"
+              class="form-select form-select-sm"
+              onchange="location.href='{% url 'conversation' %}?farm_id=' + this.value;"
+            >
+              {% for f in farms %}
+              <option
+                value="{{ f.id }}"
+                {%
+                if
+                f.id=""
+                ="farm.id"
+                %}selected{%
+                endif
+                %}
+              >
+                {{ f.farm_name|default:"Unnamed Farm" }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% if farm %}
+          <div class="mt-3 pt-3 border-top">
+            <p class="mb-2 small"><strong>Active Farm Details:</strong></p>
+            <small class="text-muted d-block mb-1">
+              <i class="bx bx-leaf"></i> {{ farm.get_crop_type_display }}
+            </small>
+            {% if farm.farm_size %}
+            <small class="text-muted d-block mb-1">
+              <i class="bx bx-ruler"></i> {{ farm.farm_size }} acres
+            </small>
+            {% endif %} {% if farm.county %}
+            <small class="text-muted d-block mb-1">
+              <i class="bx bx-map"></i> {{ farm.county }} County
+            </small>
+            {% endif %} {% if farm.sub_county %}
+            <small class="text-muted d-block">
+              <i class="bx bx-map-pin"></i> {{ farm.sub_county }}, {{ farm.ward
+              }}
+            </small>
             {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
 
-            <!-- Quick Tips Section -->
-            <div class="card border-0 shadow-sm mt-auto">
-                <div class="card-body">
-                    <h6 class="card-title fw-bold text-success mb-3">
-                        <i class='bx bx-lightbulb'></i> Quick Tips
-                    </h6>
-                    <ul class="small mb-0" style="list-style: none; padding: 0;">
-                        <li class="mb-2">
-                            <i class='bx bx-check' style="color: #28a745;"></i>
-                            <span>Ask about planting times</span>
-                        </li>
-                        <li class="mb-2">
-                            <i class='bx bx-check' style="color: #28a745;"></i>
-                            <span>Questions on pest control</span>
-                        </li>
-                        <li class="mb-2">
-                            <i class='bx bx-check' style="color: #28a745;"></i>
-                            <span>Soil and water management</span>
-                        </li>
-                        <li class="mb-2">
-                            <i class='bx bx-check' style="color: #28a745;"></i>
-                            <span>Crop selection advice</span>
-                        </li>
-                        <li>
-                            <i class='bx bx-check' style="color: #28a745;"></i>
-                            <span>Yield improvement tips</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Logout Button -->
-            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary w-100 mt-3">
-                <i class='bx bx-arrow-back'></i> Back to Dashboard
+      <!-- Recent Chats Section -->
+      {% if chat_threads %}
+      <div class="mb-4">
+        <h6 class="fw-bold text-success mb-3">
+          <i class="bx bx-history"></i> Recent Chats
+        </h6>
+        <div class="chat-threads-list">
+          {% for thread in chat_threads %}
+          <div
+            class="chat-thread-item mb-2 p-2 rounded d-flex justify-content-between align-items-center {% if thread.id == active_thread_id %}active-thread{% endif %}"
+            style="background-color: {% if thread.id == active_thread_id %}#d4edda{% else %}#f8f9fa{% endif %}; cursor: pointer; transition: all 0.3s; border-left: 4px solid {% if thread.id == active_thread_id %}#28a745{% else %}#ddd{% endif %}; flex-wrap: wrap;"
+          >
+            <a
+              href="{% url 'conversation' %}?thread_id={{ thread.id }}"
+              class="text-decoration-none flex-grow-1"
+              style="min-width: 0"
+            >
+              <p
+                class="mb-1 small fw-bold"
+                style="color: {% if thread.id == active_thread_id %}#28a745{% else %}#333{% endif %}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+              >
+                {{ thread.title|truncatewords:4 }}
+              </p>
+              <small class="text-muted d-block">
+                {{ thread.updated_at|date:"M d, H:i" }}
+              </small>
             </a>
+            <button
+              class="btn btn-sm btn-danger delete-chat-btn ms-2"
+              data-thread-id="{{ thread.id }}"
+              type="button"
+              style="padding: 4px 8px; font-size: 12px"
+              title="Delete chat"
+            >
+              <i class="bx bx-trash"></i>
+            </button>
+          </div>
+          {% endfor %}
         </div>
+      </div>
+      {% endif %}
 
-        <!-- Chat Area -->
-        <div class="col-md-9 d-flex flex-column ps-4">
-            <div class="mb-3">
-                <h3 class="fw-bold text-success">
-                    <i class='bx bx-chat'></i> Chat with Agricultural Advisor
-                </h3>
-                <small class="text-muted">Get personalized farming advice based on your farm data</small>
-            </div>
-            
-            <!-- Messages Container -->
-            <div class="card flex-fill overflow-auto p-3 mb-3 border-0 shadow" id="messages-container" style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
-                {% if conversation_history %}
-                    {% for message in conversation_history %}
-                        {% if message.role == "user" %}
-                            <div class="mb-3 d-flex justify-content-end">
-                                <div class="bubble-user p-3 rounded shadow-sm" style="max-width: 75%;">
-                                    <p class="mb-0">{{ message.content }}</p>
-                                    <small class="text-light">You</small>
-                                </div>
-                            </div>
-                        {% elif message.role == "assistant" %}
-                            <div class="mb-3 d-flex justify-content-start">
-                                <div class="bubble-assistant p-3 rounded shadow-sm" style="max-width: 75%;">
-                                    <p class="mb-0">{{ message.content }}</p>
-                                    <small class="text-muted">Advisor</small>
-                                </div>
-                            </div>
-                        {% endif %}
-                    {% endfor %}
-                {% else %}
-                    <div class="text-center text-muted py-5">
-                        <h5 class="mb-3">Welcome to the Agricultural Advisor!</h5>
-                        <p>Start by asking the advisor about your farm and crops (maize, beans, etc.)</p>
-                        <small>Your conversation history will be saved here for future reference.</small>
-                    </div>
-                {% endif %}
-            </div>
-
-            <!-- Message Input Area -->
-            <div class="card border-0 shadow">
-                <div class="card-body">
-                    <form id="message-form" method="POST">
-                        {% csrf_token %}
-                        <div class="input-group input-group-lg">
-                            <input 
-                                type="text" 
-                                class="form-control" 
-                                id="message-input"
-                                placeholder="Ask about your farm, crops, pests, planting times..." 
-                                required
-                                style="border-radius: 25px 0 0 25px; border: 2px solid #ddd; padding: 12px 20px;"
-                            >
-                            <button class="btn btn-success" type="submit" id="send-btn" style="border-radius: 0 25px 25px 0; padding: 12px 30px; font-weight: bold;">
-                                <i class='bx bxs-send'></i>
-                            </button>
-                        </div>
-                        <small class="text-muted d-block mt-2">
-                            <i class='bx bx-info-circle'></i>
-                            Ask about: planting times • pest management • soil health • crop selection • yield improvement
-                        </small>
-                    </form>
-                </div>
-            </div>
+      <!-- Quick Tips Section -->
+      <div class="card border-0 shadow-sm mt-auto">
+        <div class="card-body">
+          <h6 class="card-title fw-bold text-success mb-3">
+            <i class="bx bx-lightbulb"></i> Quick Tips
+          </h6>
+          <ul class="small mb-0" style="list-style: none; padding: 0">
+            <li class="mb-2">
+              <i class="bx bx-check" style="color: #28a745"></i>
+              <span>Ask about planting times</span>
+            </li>
+            <li class="mb-2">
+              <i class="bx bx-check" style="color: #28a745"></i>
+              <span>Questions on pest control</span>
+            </li>
+            <li class="mb-2">
+              <i class="bx bx-check" style="color: #28a745"></i>
+              <span>Soil and water management</span>
+            </li>
+            <li class="mb-2">
+              <i class="bx bx-check" style="color: #28a745"></i>
+              <span>Crop selection advice</span>
+            </li>
+            <li>
+              <i class="bx bx-check" style="color: #28a745"></i>
+              <span>Yield improvement tips</span>
+            </li>
+          </ul>
         </div>
+      </div>
+
+      <!-- Logout Button -->
+      <a
+        href="{% url 'dashboard' %}"
+        class="btn btn-outline-secondary w-100 mt-3"
+      >
+        <i class="bx bx-arrow-back"></i> Back to Dashboard
+      </a>
     </div>
+
+    <!-- Chat Area -->
+    <div class="col-md-9 d-flex flex-column ps-4">
+      <div class="mb-3">
+        <h3 class="fw-bold text-success">
+          <i class="bx bx-chat"></i> Chat with Agricultural Advisor
+        </h3>
+        <small class="text-muted"
+          >Get personalized farming advice based on your farm data</small
+        >
+      </div>
+
+      <!-- Messages Container -->
+      <div
+        class="card flex-fill overflow-auto p-3 mb-3 border-0 shadow"
+        id="messages-container"
+        style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)"
+      >
+        {% if conversation_history %} {% for message in conversation_history %}
+        {% if message.role == "user" %}
+        <div class="mb-3 d-flex justify-content-end">
+          <div class="bubble-user p-3 rounded shadow-sm" style="max-width: 75%">
+            <p class="mb-0">{{ message.content }}</p>
+            <small class="text-light">You</small>
+          </div>
+        </div>
+        {% elif message.role == "assistant" %}
+        <div class="mb-3 d-flex justify-content-start">
+          <div
+            class="bubble-assistant p-3 rounded shadow-sm"
+            style="max-width: 75%"
+          >
+            <p class="mb-0">{{ message.content }}</p>
+            <small class="text-muted">Advisor</small>
+          </div>
+        </div>
+        {% endif %} {% endfor %} {% else %}
+        <div class="text-center text-muted py-5">
+          <h5 class="mb-3">Welcome to the Agricultural Advisor!</h5>
+          <p>
+            Start by asking the advisor about your farm and crops (maize, beans,
+            etc.)
+          </p>
+          <small
+            >Your conversation history will be saved here for future
+            reference.</small
+          >
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Message Input Area -->
+      <div class="card border-0 shadow">
+        <div class="card-body">
+          <form id="message-form" method="POST">
+            {% csrf_token %}
+            <div class="input-group input-group-lg">
+              <input
+                type="text"
+                class="form-control"
+                id="message-input"
+                placeholder="Ask about your farm, crops, pests, planting times..."
+                required
+                style="
+                  border-radius: 25px 0 0 25px;
+                  border: 2px solid #ddd;
+                  padding: 12px 20px;
+                "
+              />
+              <button
+                class="btn btn-success"
+                type="submit"
+                id="send-btn"
+                style="
+                  border-radius: 0 25px 25px 0;
+                  padding: 12px 30px;
+                  font-weight: bold;
+                "
+              >
+                <i class="bx bxs-send"></i>
+              </button>
+            </div>
+            <small class="text-muted d-block mt-2">
+              <i class="bx bx-info-circle"></i>
+              Ask about: planting times • pest management • soil health • crop
+              selection • yield improvement
+            </small>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-    /* Layout fixes */
-    body {
-        background-color: #08291a;
-        color: #333;
-    }
-    .container-fluid {
-        min-height: calc(100vh - 60px);
-        padding-top: 20px;
-    }
-    
-    /* Sidebar styles */
-    .col-md-3 {
-        background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
-        border-radius: 10px;
-        padding: 20px !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .chat-thread-item {
-        border-left: 4px solid #ddd;
-        transition: all 0.3s ease;
-    }
-    
-    .chat-thread-item:hover {
-        background-color: #e8f5e9 !important;
-        transform: translateX(5px);
-        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.15);
-    }
-    
-    .chat-thread-item.active-thread {
-        background-color: #d4edda !important;
-        border-left-color: #28a745;
-    }
-    
-    .delete-chat-btn {
-        opacity: 0.7;
-        transition: all 0.3s;
-    }
-    
-    .delete-chat-btn:hover {
-        opacity: 1;
-        transform: scale(1.15);
-    }
-    
-    /* Messages container */
-    #messages-container {
-        max-height: 60vh;
-        border-radius: 12px;
-        background: #ffffff !important;
-        border: none;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    }
-    
-    /* Message bubbles */
-    .bubble-user {
-        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-        color: #fff;
-        border-radius: 18px;
-        word-wrap: break-word;
-    }
-    
-    .bubble-assistant {
-        background: #f1f0f0;
-        color: #333;
-        border: 1px solid #ddd;
-        border-radius: 18px;
-        word-wrap: break-word;
-    }
-    
-    /* Input styling */
-    .input-group .form-control {
-        border-radius: 25px 0 0 25px;
-        border: 2px solid #ddd;
-        padding: 12px 20px;
-        font-size: 15px;
-        transition: border-color 0.3s;
-    }
-    
-    .input-group .form-control:focus {
-        border-color: #28a745;
-        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
-    }
-    
-    .input-group .btn {
-        border-radius: 0 25px 25px 0;
-        border: 2px solid #ddd;
-        padding: 12px 30px;
-        font-weight: bold;
-        transition: all 0.3s;
-    }
-    
-    .input-group .btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
-    }
-    
-    /* Scroll bar customization */
-    #messages-container::-webkit-scrollbar {
-        width: 8px;
-    }
-    
-    #messages-container::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.05);
-        border-radius: 10px;
-    }
-    
-    #messages-container::-webkit-scrollbar-thumb {
-        background-color: rgba(40, 167, 69, 0.4);
-        border-radius: 4px;
-    }
-    
-    #messages-container::-webkit-scrollbar-thumb:hover {
-        background-color: rgba(40, 167, 69, 0.6);
-    }
-    
-    /* Card styles */
-    .card {
-        border-radius: 10px;
-        transition: all 0.3s;
-    }
-    
-    .card:hover {
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-    }
-    
-    /* Button styles */
-    .btn-success {
-        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-        border: none;
-        font-weight: bold;
-        transition: all 0.3s;
-    }
-    
-    .btn-success:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 16px rgba(40, 167, 69, 0.3);
-    }
-    
-    /* Text color for success */
-    .text-success {
-        color: #28a745 !important;
-    }
-    
-    /* Profile info styling */
-    .profile-info p, .profile-info small {
-        line-height: 1.6;
-    }
+  /* Layout fixes */
+  body {
+    background-color: #08291a;
+    color: #333;
+  }
+  .container-fluid {
+    min-height: calc(100vh - 60px);
+    padding-top: 20px;
+  }
+
+  /* Sidebar styles */
+  .col-md-3 {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+    border-radius: 10px;
+    padding: 20px !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .chat-thread-item {
+    border-left: 4px solid #ddd;
+    transition: all 0.3s ease;
+  }
+
+  .chat-thread-item:hover {
+    background-color: #e8f5e9 !important;
+    transform: translateX(5px);
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.15);
+  }
+
+  .chat-thread-item.active-thread {
+    background-color: #d4edda !important;
+    border-left-color: #28a745;
+  }
+
+  .delete-chat-btn {
+    opacity: 0.7;
+    transition: all 0.3s;
+  }
+
+  .delete-chat-btn:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+
+  /* Messages container */
+  #messages-container {
+    max-height: 60vh;
+    border-radius: 12px;
+    background: #ffffff !important;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Message bubbles */
+  .bubble-user {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: #fff;
+    border-radius: 18px;
+    word-wrap: break-word;
+  }
+
+  .bubble-assistant {
+    background: #f1f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 18px;
+    word-wrap: break-word;
+  }
+
+  /* Input styling */
+  .input-group .form-control {
+    border-radius: 25px 0 0 25px;
+    border: 2px solid #ddd;
+    padding: 12px 20px;
+    font-size: 15px;
+    transition: border-color 0.3s;
+  }
+
+  .input-group .form-control:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+  }
+
+  .input-group .btn {
+    border-radius: 0 25px 25px 0;
+    border: 2px solid #ddd;
+    padding: 12px 30px;
+    font-weight: bold;
+    transition: all 0.3s;
+  }
+
+  .input-group .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+  }
+
+  /* Scroll bar customization */
+  #messages-container::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  #messages-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+  }
+
+  #messages-container::-webkit-scrollbar-thumb {
+    background-color: rgba(40, 167, 69, 0.4);
+    border-radius: 4px;
+  }
+
+  #messages-container::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(40, 167, 69, 0.6);
+  }
+
+  /* Card styles */
+  .card {
+    border-radius: 10px;
+    transition: all 0.3s;
+  }
+
+  .card:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Button styles */
+  .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border: none;
+    font-weight: bold;
+    transition: all 0.3s;
+  }
+
+  .btn-success:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(40, 167, 69, 0.3);
+  }
+
+  /* Text color for success */
+  .text-success {
+    color: #28a745 !important;
+  }
+
+  /* Profile info styling */
+  .profile-info p,
+  .profile-info small {
+    line-height: 1.6;
+  }
 </style>
 
 <script>
-document.getElementById('message-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const messageInput = document.getElementById('message-input');
-    const message = messageInput.value.trim();
-    
-    if (!message) return;
-    
-    const sendBtn = document.getElementById('send-btn');
-    const originalBtnText = sendBtn.innerHTML;
-    sendBtn.disabled = true;
-    sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
-    
-    // Add user message to display immediately
-    const messagesContainer = document.getElementById('messages-container');
-    const userMessageDiv = document.createElement('div');
-    userMessageDiv.className = 'mb-3 d-flex justify-content-end';
-    userMessageDiv.innerHTML = `
+  document
+    .getElementById("message-form")
+    .addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      const messageInput = document.getElementById("message-input");
+      const message = messageInput.value.trim();
+
+      if (!message) return;
+
+      const sendBtn = document.getElementById("send-btn");
+      const originalBtnText = sendBtn.innerHTML;
+      sendBtn.disabled = true;
+      sendBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+
+      // Add user message to display immediately
+      const messagesContainer = document.getElementById("messages-container");
+      const userMessageDiv = document.createElement("div");
+      userMessageDiv.className = "mb-3 d-flex justify-content-end";
+      userMessageDiv.innerHTML = `
         <div class="bubble-user p-3 rounded shadow-sm" style="max-width: 75%;">
             <p class="mb-0">${message}</p>
             <small class="text-light">You</small>
         </div>
     `;
-    messagesContainer.appendChild(userMessageDiv);
-    
-    // Send message via AJAX
-    const formData = new FormData();
-    formData.append('message', message);
-    
-    // Get current thread_id from URL params
-    const urlParams = new URLSearchParams(window.location.search);
-    const threadId = urlParams.get('thread_id');
-    let fetchUrl = '{% url "conversation" %}';
-    if (threadId) {
-        fetchUrl += '?thread_id=' + threadId;
-    }
-    
-    fetch(fetchUrl, {
-        method: 'POST',
+      messagesContainer.appendChild(userMessageDiv);
+
+      // Send message via AJAX
+      const formData = new FormData();
+      formData.append("message", message);
+
+      // Get current thread_id from URL params
+      const urlParams = new URLSearchParams(window.location.search);
+      const threadId = urlParams.get("thread_id");
+      let fetchUrl = '{% url "conversation" %}';
+      if (threadId) {
+        fetchUrl += "?thread_id=" + threadId;
+      }
+
+      fetch(fetchUrl, {
+        method: "POST",
         headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]")
+            .value,
         },
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
+        body: formData,
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.status === "success") {
             // Add advisor response
-            const advisorMessageDiv = document.createElement('div');
-            advisorMessageDiv.className = 'mb-3 d-flex justify-content-start';
+            const advisorMessageDiv = document.createElement("div");
+            advisorMessageDiv.className = "mb-3 d-flex justify-content-start";
             advisorMessageDiv.innerHTML = `
                 <div class="bubble-assistant p-3 rounded shadow-sm" style="max-width: 75%;">
                     <p class="mb-0">${data.advisor_response}</p>
@@ -386,71 +482,81 @@ document.getElementById('message-form').addEventListener('submit', function(e) {
                 </div>
             `;
             messagesContainer.appendChild(advisorMessageDiv);
-            
+
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        } else {
-            alert('Error: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to send message. Please try again.');
-    })
-    .finally(() => {
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = originalBtnText;
-        messageInput.value = '';
-        messageInput.focus();
+          } else {
+            alert("Error: " + data.error);
+          }
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+          alert("Failed to send message. Please try again.");
+        })
+        .finally(() => {
+          sendBtn.disabled = false;
+          sendBtn.innerHTML = originalBtnText;
+          messageInput.value = "";
+          messageInput.focus();
+        });
     });
-});
 
-// Handle delete chat buttons
-document.querySelectorAll('.delete-chat-btn').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const threadId = this.getAttribute('data-thread-id');
-        const threadTitle = this.closest('.chat-thread-item').querySelector('p').textContent.trim();
-        
-        if (confirm(`Delete chat "${threadTitle}"? This action cannot be undone.`)) {
-            const deleteUrl = `{% url 'delete_chat' thread_id=0 %}`.replace('0', threadId);
-            
-            fetch(deleteUrl, {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+  // Handle delete chat buttons
+  document.querySelectorAll(".delete-chat-btn").forEach((btn) => {
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const threadId = this.getAttribute("data-thread-id");
+      const threadTitle = this.closest(".chat-thread-item")
+        .querySelector("p")
+        .textContent.trim();
+
+      if (
+        confirm(`Delete chat "${threadTitle}"? This action cannot be undone.`)
+      ) {
+        const deleteUrl = `{% url 'delete_chat' thread_id=0 %}`.replace(
+          "0",
+          threadId,
+        );
+
+        fetch(deleteUrl, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]")
+              .value,
+          },
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === "success") {
+              // Remove the chat thread from the DOM
+              const threadElement = document
+                .querySelector(`[data-thread-id="${threadId}"]`)
+                .closest(".chat-thread-item");
+              threadElement.style.opacity = "0";
+              threadElement.style.transform = "translateX(-10px)";
+
+              setTimeout(() => {
+                threadElement.remove();
+
+                // Reload page if this was the active chat
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get("thread_id") == threadId) {
+                  window.location.href = '{% url "conversation" %}';
                 }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    // Remove the chat thread from the DOM
-                    const threadElement = document.querySelector(`[data-thread-id="${threadId}"]`).closest('.chat-thread-item');
-                    threadElement.style.opacity = '0';
-                    threadElement.style.transform = 'translateX(-10px)';
-                    
-                    setTimeout(() => {
-                        threadElement.remove();
-                        
-                        // Reload page if this was the active chat
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (urlParams.get('thread_id') == threadId) {
-                            window.location.href = '{% url "conversation" %}';
-                        }
-                    }, 300);
-                } else {
-                    alert('Error deleting chat: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Failed to delete chat. Please try again.');
-            });
-        }
+              }, 300);
+            } else {
+              alert("Error deleting chat: " + data.message);
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            alert("Failed to delete chat. Please try again.");
+          });
+      }
     });
-});
+  });
 </script>
 {% endblock %}

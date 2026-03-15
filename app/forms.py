@@ -262,3 +262,63 @@ class EmailVerificationForm(forms.Form):
         if code and not code.isdigit():
             raise forms.ValidationError("Verification code must contain only numbers.")
         return code
+
+class PhoneAuthenticationForm(forms.Form):
+    """
+    Form for phone-based authentication.
+    Users enter their phone number to sign in or sign up.
+    """
+    phone = forms.CharField(
+        label="Phone Number",
+        max_length=15,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '+254712345678 or 0712345678',
+            'autocomplete': 'tel',
+            'inputmode': 'tel',
+            'pattern': r'^\+?1?\d{9,15}$'
+        }),
+        help_text='Enter your phone number in international format (+254...) or local format (07...).'
+    )
+    
+    def clean_phone(self):
+        """
+        Validate that the phone number has the correct format.
+        """
+        phone = self.cleaned_data.get('phone')
+        if phone:
+            if not phone.replace('+', '').replace('0', '').isdigit():
+                raise forms.ValidationError("Phone number must contain only digits, optional +, and 0 prefix.")
+            if not (9 <= len(phone.replace('+', '').lstrip('0')) <= 15):
+                raise forms.ValidationError("Phone number must be between 9 and 15 digits.")
+        return phone
+
+
+class PhoneVerificationForm(forms.Form):
+    """
+    Form for users to enter the 6-digit verification code sent to their phone.
+    """
+    verification_code = forms.CharField(
+        label="Verification Code",
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control text-center',
+            'placeholder': '000000',
+            'inputmode': 'numeric',
+            'pattern': '[0-9]{6}',
+            'autocomplete': 'off',
+            'maxlength': '6',
+            'style': 'font-size: 2rem; letter-spacing: 0.5rem; font-weight: bold;'
+        }),
+        help_text='Enter the 6-digit code sent to your phone number.'
+    )
+    
+    def clean_verification_code(self):
+        """
+        Validate that the code contains only digits.
+        """
+        code = self.cleaned_data.get('verification_code')
+        if code and not code.isdigit():
+            raise forms.ValidationError("Verification code must contain only numbers.")
+        return code

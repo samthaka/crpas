@@ -8,11 +8,13 @@ from django.utils import timezone
 from datetime import timedelta
 import random
 import logging
+import uuid
 
 from .models import Farmer, Farm, ChatThread, Notification
 from .utils import chat_with_advisor, reverse_geocode_coordinates
-from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerProfileForm, FarmRegistrationForm, EmailVerificationForm
+from .forms import CustomUserCreationForm, CustomAuthenticationForm, FarmerProfileForm, FarmRegistrationForm, EmailVerificationForm, PhoneAuthenticationForm, PhoneVerificationForm
 from .email_service import send_verification_email
+from .sms_service import send_verification_sms
 
 logger = logging.getLogger(__name__)
 CustomUser = get_user_model()
@@ -277,6 +279,285 @@ def resend_verification_email(request):
     
     return redirect('verify_email')
 
+def phone_auth(request):
+    """
+    Handles phone-based authentication (login/signup).
+    Users enter their phone number and receive a 6-digit code via SMS.
+    """
+    form = PhoneAuthenticationForm()
+    
+    if request.method == 'POST':
+        form = PhoneAuthenticationForm(request.POST)
+        if form.is_valid():
+            phone = form.cleaned_data.get('phone')
+            logger.info(f"[PHONE AUTH] Form submission for phone: {phone}")
+            
+            # Normalize phone number - store as international format
+            phone_normalized = phone.replace(' ', '')
+            if phone_normalized.startswith('0'):
+                phone_normalized = '+254' + phone_normalized[1:]
+            elif not phone_normalized.startswith('+'):
+                if phone_normalized.startswith('254'):
+                    phone_normalized = '+' + phone_normalized
+                else:
+                    phone_normalized = '+254' + phone_normalized
+            
+            logger.info(f"Normalized phone: {phone_normalized}")
+            
+            # Check if user exists with this phone number
+            user = CustomUser.objects.filter(phone=phone_normalized).first()
+            
+            if user:
+                # User exists - this is a login flow
+                logger.info(f"✓ User found with phone {phone_normalized}")
+                
+                # Ensure phone users have email_verified=True (in case of older accounts)
+                if not user.email_verified:
+                    user.email_verified = True
+                    user.save()
+                
+                # Generate 6-digit verification code
+                verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                user.phone_verification_code = verification_code
+                user.phone_verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+                user.save()
+                
+                logger.info(f"Generated phone verification code for {phone_normalized}: {verification_code}")
+                
+                # Store phone in session for verification page
+                request.session['auth_phone'] = phone_normalized
+                
+                # Send verification SMS
+                sms_sent = send_verification_sms(phone_normalized, verification_code)
+                
+                if sms_sent:
+                    logger.info(f"✓ Verification SMS sent to {phone_normalized}")
+                    messages.success(request, f"Verification code sent to {phone_normalized}!")
+                    return redirect('verify_phone')
+                else:
+                    logger.error(f"✗ Failed to send verification SMS to {phone_normalized}")
+                    messages.error(request, "Failed to send verification code. Please try again.")
+            else:
+                # User doesn't exist - create new account for signup
+                logger.info(f"No user found with phone {phone_normalized}, creating new account")
+                try:
+                    # For phone-only signup, use UUID as email (it's just a placeholder)
+                    # phone users won't use email for login
+                    unique_email = f"phone-{uuid.uuid4()}@crpas.local"
+                    
+                    new_user = CustomUser.objects.create_user(
+                        email=unique_email,
+                        phone=phone_normalized,
+                        password=None  # Phone auth doesn't use password initially
+                    )
+                    
+                    # Mark email as verified since phone users don't use email
+                    # This prevents middleware from redirecting them to email verification
+                    new_user.email_verified = True
+                    new_user.save()  # Save immediately to persist email_verified flag
+                    
+                    logger.info(f"✓ New user created for phone {phone_normalized}")
+                    
+                    # Generate 6-digit verification code
+                    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                    new_user.phone_verification_code = verification_code
+                    new_user.phone_verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+                    new_user.save()
+                    
+                    logger.info(f"Generated phone verification code for {phone_normalized}: {verification_code}")
+                    
+                    # Store phone in session for verification page
+                    request.session['auth_phone'] = phone_normalized
+                    request.session['is_phone_signup'] = True
+                    
+                    # Send verification SMS
+                    sms_sent = send_verification_sms(phone_normalized, verification_code)
+                    
+                    if sms_sent:
+                        logger.info(f"✓ Verification SMS sent to {phone_normalized}")
+                        messages.success(request, f"Verification code sent to {phone_normalized}!")
+                        return redirect('verify_phone')
+                    else:
+                        logger.error(f"✗ Failed to send verification SMS to {phone_normalized}")
+                        messages.error(request, "Failed to send verification code. Please try again.")
+                        # Clean up the user we just created
+                        new_user.delete()
+                        return redirect('phone_auth')
+                        
+                except Exception as e:
+                    logger.exception(f"Exception during phone signup: {str(e)}")
+                    messages.error(request, f"An error occurred: {str(e)}")
+    
+    return render(request, 'phone_auth.html', {'form': form})
+
+def verify_phone(request):
+    """
+    Handles phone verification during phone-based signup/login.
+    Users enter the 6-digit code sent to their phone to verify their account.
+    Automatically sends the verification SMS on first page load if needed.
+    """
+    # Get the user being verified from session or database
+    auth_phone = request.session.get('auth_phone')
+    is_phone_signup = request.session.get('is_phone_signup', False)
+    
+    if not auth_phone:
+        messages.error(request, "No pending phone verification found. Please start over.")
+        return redirect('phone_auth')
+    
+    # Get user by phone number
+    user = CustomUser.objects.filter(phone=auth_phone).first()
+    
+    if not user:
+        messages.error(request, "User not found. Please start over.")
+        return redirect('phone_auth')
+    
+    # Check if verification code has expired or is missing
+    if not user.is_phone_verification_code_valid():
+        messages.error(request, "Your verification code has expired. Please request a new one.")
+        # Clear session
+        request.session.pop('auth_phone', None)
+        request.session.pop('is_phone_signup', None)
+        return redirect('phone_auth')
+    
+    # AUTO-SEND VERIFICATION SMS on first GET request (if not already sent or as fallback)
+    if request.method == 'GET' and not request.session.get('verification_sms_sent'):
+        sms_sent = send_verification_sms(user.phone, user.phone_verification_code)
+        if sms_sent:
+            logger.info(f"✓ Verification SMS sent on page load to {user.phone}")
+            request.session['verification_sms_sent'] = True
+        else:
+            logger.error(f"✗ Failed to send verification SMS on page load to {user.phone}")
+    
+    form = PhoneVerificationForm()
+    
+    if request.method == 'POST':
+        form = PhoneVerificationForm(request.POST)
+        if form.is_valid():
+            entered_code = form.cleaned_data.get('verification_code')
+            
+            if entered_code == user.phone_verification_code:
+                # Mark phone as verified
+                user.phone_verified = True
+                user.phone_verification_code = None
+                user.phone_verification_code_expires_at = None
+                user.save()
+                
+                logger.info(f"✓ Phone verified for {user.phone}")
+                messages.success(request, "Phone verified successfully!")
+                
+                if is_phone_signup:
+                    # This is a signup flow - redirect to set password
+                    request.session.pop('is_phone_signup', None)
+                    request.session.pop('verification_sms_sent', None)
+                    return redirect('phone_signup_password')
+                else:
+                    # This is a login flow - log the user in
+                    user.backend = 'app.backends.EmailBackend'
+                    login(request, user)
+                    request.session.pop('auth_phone', None)
+                    request.session.pop('verification_sms_sent', None)
+                    logger.info(f"✓ Login successful for {user.phone}")
+                    messages.success(request, "Logged in successfully!")
+                    return redirect('dashboard')
+            else:
+                messages.error(request, "Invalid verification code. Please try again.")
+                logger.warning(f"Invalid phone verification code attempt for {user.phone}")
+                form.add_error('verification_code', 'Code does not match. Please check and try again.')
+    
+    context = {
+        'form': form,
+        'phone': user.phone,
+        'resend_info': f'A verification code has been sent to {user.phone}'
+    }
+    
+    return render(request, 'verify_phone.html', context)
+
+def resend_verification_sms(request):
+    """
+    Resend the verification SMS if the user didn't receive the first one.
+    """
+    if request.method != 'POST':
+        return redirect('verify_phone')
+    
+    # Get the phone being verified from session
+    auth_phone = request.session.get('auth_phone')
+    
+    if not auth_phone:
+        messages.error(request, "No pending phone verification found.")
+        return redirect('phone_auth')
+    
+    # Get user by phone
+    user = CustomUser.objects.filter(phone=auth_phone).first()
+    
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect('phone_auth')
+    
+    # Regenerate verification code
+    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    user.phone_verification_code = verification_code
+    user.phone_verification_code_expires_at = timezone.now() + timedelta(minutes=10)
+    user.save()
+    
+    logger.info(f"Regenerated phone verification code for {user.phone}: {verification_code}")
+    
+    # Send verification SMS
+    sms_sent = send_verification_sms(user.phone, verification_code)
+    
+    if sms_sent:
+        logger.info(f"✓ Verification SMS resent to {user.phone}")
+        messages.success(request, "Verification code resent! Check your phone.")
+    else:
+        logger.error(f"✗ Failed to resend verification SMS to {user.phone}")
+        messages.error(request, "Failed to resend verification code. Please try again.")
+    
+    return redirect('verify_phone')
+
+def phone_signup_password(request):
+    """
+    Allow newly signed-up phone users to set their password.
+    Phone users can later optionally add an email if they want email-based login.
+    """
+    auth_phone = request.session.get('auth_phone')
+    
+    if not auth_phone:
+        messages.error(request, "Session expired. Please sign up again.")
+        return redirect('phone_auth')
+    
+    user = CustomUser.objects.filter(phone=auth_phone).first()
+    
+    if not user or not user.phone_verified:
+        messages.error(request, "Invalid session. Please sign up again.")
+        return redirect('phone_auth')
+    
+    if request.method == 'POST':
+        password1 = request.POST.get('password1')
+        password2 = request.POST.get('password2')
+        
+        if not password1 or not password2:
+            messages.error(request, "Please enter a password.")
+        elif len(password1) < 8:
+            messages.error(request, "Password must be at least 8 characters long.")
+        elif password1 != password2:
+            messages.error(request, "Passwords do not match.")
+        else:
+            user.set_password(password1)
+            user.save()
+            
+            logger.info(f"✓ Password set for phone signup user {user.phone}")
+            messages.success(request, "Password set successfully!")
+            
+            # Log the user in - specify the backend since multiple are configured
+            user.backend = 'app.backends.EmailBackend'
+            login(request, user)
+            
+            # Clean up session
+            request.session.pop('auth_phone', None)
+            
+            return redirect('farmer_registration')
+    
+    return render(request, 'phone_signup_password.html', {'phone': user.phone})
+
 def logout_view(request):
     """
     Handles user logout.
@@ -482,33 +763,48 @@ def conversation_view(request):
     Conversation page where the farmer can chat with an agricultural advisor.
     The advisor can answer questions about farming, crops, and advisory.
     Supports loading a specific chat thread via ?thread_id parameter.
+    Allows selecting from farmer's farms via ?farm_id parameter.
     """
-    # Get or create farmer profile for the logged-in user
-    try:
-        farmer = Farmer.objects.filter(phone=request.user.email).first() or Farmer.objects.first()
-    except Farmer.DoesNotExist:
-        messages.error(request, "Please complete your farmer registration first.")
-        return redirect('farmer_registration')
+    # Get farmer profile for the logged-in user (same as dashboard)
+    farmer = Farmer.objects.filter(email=request.user.email).first()
     
     if not farmer:
         messages.error(request, "Please complete your farmer registration first.")
         return redirect('farmer_registration')
     
-    # Get the chat thread - either from query param or the most recent one
+    # Get farmer's farms
+    farms = farmer.farms.all()
+    if not farms.exists():
+        messages.error(request, "Please register at least one farm first.")
+        return redirect('farm_registration')
+    
+    # Get the selected farm - either from query param or the first farm (default)
+    farm_id = request.GET.get('farm_id')
+    if farm_id:
+        farm = farms.filter(id=farm_id).first()
+        if not farm:
+            messages.error(request, "Farm not found.")
+            return redirect('conversation')
+    else:
+        # Default to the first farm
+        farm = farms.first()
+    
+    # Get the chat thread - either from query param or the most recent one for this farm
     thread_id = request.GET.get('thread_id')
     if thread_id:
-        # Load specific thread
-        chat_thread = farmer.chat_threads.filter(id=thread_id).first()
+        # Load specific thread (for this farm)
+        chat_thread = farm.chat_threads.filter(id=thread_id).first()
         if not chat_thread:
             messages.error(request, "Chat thread not found.")
             return redirect('conversation')
     else:
-        # Get the most recent thread
-        chat_thread = farmer.chat_threads.order_by('-updated_at').first()
+        # Get the most recent thread for this farm
+        chat_thread = farm.chat_threads.order_by('-updated_at').first()
         if not chat_thread:
-            # If no chat threads exist, create one
+            # If no chat threads exist for this farm, create one
             chat_thread = ChatThread.objects.create(
                 farmer=farmer,
+                farm=farm,
                 title='New chat',
                 history=[]
             )
@@ -521,7 +817,7 @@ def conversation_view(request):
             return JsonResponse({'error': 'Message cannot be empty'}, status=400)
         
         # Get the advisor response
-        advisor_response = chat_with_advisor(farmer, chat_thread, user_message)
+        advisor_response = chat_with_advisor(farm, chat_thread, user_message)
         
         # Return the response as JSON
         return JsonResponse({
@@ -531,8 +827,8 @@ def conversation_view(request):
         })
     
     # GET request - display conversation page
-    # Fetch all chat threads for this farmer
-    chat_threads = farmer.chat_threads.all().order_by('-updated_at')
+    # Fetch all chat threads for this farm
+    chat_threads = farm.chat_threads.all().order_by('-updated_at')
     
     # Filter out system messages for display (only show user and assistant messages)
     conversation_history = [
@@ -542,6 +838,8 @@ def conversation_view(request):
     
     context = {
         'farmer': farmer,
+        'farm': farm,
+        'farms': farms,
         'conversation_history': conversation_history,
         'chat_threads': chat_threads,
         'active_thread_id': chat_thread.id,

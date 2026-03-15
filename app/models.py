@@ -45,6 +45,39 @@ class CustomUser(AbstractUser):
         help_text="Timestamp when the verification code expires"
     )
     
+    # Phone verification fields
+    phone = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        validators=[
+            RegexValidator(
+                regex=r'^\+?1?\d{9,15}$',
+                message="Phone number must be entered in the format: '+254712345678' or '0712345678'. Up to 15 digits allowed."
+            )
+        ],
+        verbose_name="Phone Number",
+        help_text="User's phone number for SMS-based authentication"
+    )
+    phone_verified = models.BooleanField(
+        default=False,
+        verbose_name="Phone Verified",
+        help_text="Indicates whether the user has verified their phone number"
+    )
+    phone_verification_code = models.CharField(
+        max_length=6,
+        blank=True,
+        null=True,
+        verbose_name="Phone Verification Code",
+        help_text="6-digit code sent to user's phone for verification"
+    )
+    phone_verification_code_expires_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Phone Verification Code Expiry",
+        help_text="Timestamp when the phone verification code expires"
+    )
+    
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='customuser_set',
@@ -66,12 +99,20 @@ class CustomUser(AbstractUser):
         return self.email
     
     def is_verification_code_valid(self):
-        """Check if verification code exists and hasn't expired"""
+        """Check if email verification code exists and hasn't expired"""
         if not self.email_verification_code:
             return False
         if self.verification_code_expires_at is None:
             return False
         return timezone.now() < self.verification_code_expires_at
+    
+    def is_phone_verification_code_valid(self):
+        """Check if phone verification code exists and hasn't expired"""
+        if not self.phone_verification_code:
+            return False
+        if self.phone_verification_code_expires_at is None:
+            return False
+        return timezone.now() < self.phone_verification_code_expires_at
 
 class Farmer(models.Model):
     fname = models.CharField(
@@ -213,15 +254,17 @@ class Farm(models.Model):
 
 
 class ChatThread(models.Model):
-    """A conversation thread for a specific farmer."""
+    """A conversation thread for a specific farm/farmer."""
     farmer = models.ForeignKey(Farmer, related_name='chat_threads', on_delete=models.CASCADE)
+    farm = models.ForeignKey(Farm, related_name='chat_threads', on_delete=models.CASCADE, null=True, blank=True)
     title = models.CharField(max_length=200, blank=True, default='New chat')
     history = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"ChatThread for {self.farmer} ({self.created_at:%Y-%m-%d %H:%M})"
+        farm_info = f" - {self.farm.farm_name}" if self.farm and self.farm.farm_name else ""
+        return f"ChatThread for {self.farmer}{farm_info} ({self.created_at:%Y-%m-%d %H:%M})"
 
 
 class NotificationPreference(models.Model):

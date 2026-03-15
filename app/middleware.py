@@ -15,6 +15,10 @@ UNVERIFIED_ALLOWED_URLS = [
     '/auth/',
     '/verify-email/',
     '/resend-verification/',
+    '/phone-auth/',
+    '/verify-phone/',
+    '/resend-sms/',
+    '/phone-signup-password/',
     '/api/',  # Allow API endpoints
     '/static/',  # Allow static files
     '/logout/',

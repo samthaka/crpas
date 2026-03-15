@@ -587,28 +587,37 @@ OUTPUT RULES:
         return f"Error generating advisory: {str(e)}"
 
 
-def chat_with_advisor(farmer, chat_thread, user_message):
+def chat_with_advisor(farm, chat_thread, user_message):
     """
     Handle conversational chat with the advisor about farming topics.
     Uses Groq to maintain context across multiple messages in the current chat thread.
     Only sends the system prompt + messages from the current chat thread to avoid context bloat.
+    
+    Args:
+        farm (Farm): The farm being discussed in the chat
+        chat_thread (ChatThread): The conversation thread
+        user_message (str): The user's message
     """
     if not GROQ_AVAILABLE:
         return "Sorry, the chat advisor is currently unavailable. Please ensure the Groq API is properly configured."
     
     client = Groq(api_key=settings.GROQ_API_KEY)
     
-    crop = "maize" if farmer.crop_type == 'maize' else "beans" if farmer.crop_type == 'beans' else "maize and beans (intercropped)"
+    farmer = farm.farmer
+    crop = "maize" if farm.crop_type == 'maize' else "beans" if farm.crop_type == 'beans' else "maize and beans (intercropped)"
     
-    # Build system prompt with farmer context
+    # Build system prompt with farm context
     system_prompt = f"""You are a friendly and knowledgeable Kenyan agricultural advisor helping farmers improve their farming practices.
 
 Farmer Profile:
 - Name: {farmer.fname} {farmer.lname}
-- Location: {farmer.lat}, {farmer.long}
+- Farm: {farm.farm_name or "Unnamed farm"}
+- Farm Size: {farm.farm_size} acres
+- Location: {farm.lat}, {farm.long}
+- County: {farm.county or "Not specified"}
+- Sub-county: {farm.sub_county or "Not specified"}
+- Ward: {farm.ward or "Not specified"}
 - Primary Crops: {crop}
-- Sub-county: {farmer.sub_county}
-- Ward: {farmer.ward}
 
 Your role is to provide practical, localized farming advice about:
 1. Crop selection and suitability for their location

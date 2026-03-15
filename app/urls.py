@@ -6,13 +6,17 @@ from . views import (
     get_notifications, mark_notification_as_read, delete_notification,
     get_notification_preferences, update_notification_preferences
 )
-from . views import auth_view, index_redirect, dashboard, logout_view, farmer_registration, reverse_geocode_api, conversation_view, new_chat_view, delete_chat_view, verify_email, resend_verification_email
+from . views import auth_view, index_redirect, dashboard, logout_view, farmer_registration, reverse_geocode_api, conversation_view, new_chat_view, delete_chat_view, verify_email, resend_verification_email, phone_auth, verify_phone, resend_verification_sms, phone_signup_password
 
 urlpatterns = [
     path('', index_redirect, name='index'),
     path('auth/', auth_view, name='auth'),
     path('verify-email/', verify_email, name='verify_email'),
     path('resend-verification/', resend_verification_email, name='resend_verification'),
+    path('phone-auth/', phone_auth, name='phone_auth'),
+    path('verify-phone/', verify_phone, name='verify_phone'),
+    path('resend-sms/', resend_verification_sms, name='resend_sms'),
+    path('phone-signup-password/', phone_signup_password, name='phone_signup_password'),
     path('farmer-registration/', farmer_registration, name='farmer_registration'),
     path('farm-registration/', farm_registration, name='farm_registration'),
     path('farm/<int:farm_id>/edit/', edit_farm_details, name='edit_farm_details'),

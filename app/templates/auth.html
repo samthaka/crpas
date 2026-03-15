@@ -113,13 +113,20 @@
             Login with Phone
           </h3>
           <br />
-          <button
-            type="submit"
+          <a
+            href="{% url 'phone_auth' %}"
             class="btn1 animation"
-            style="--i: 4; --j: 24; margin-left: 30%; margin-bottom: -50px"
+            style="
+              --i: 4;
+              --j: 24;
+              margin-left: 30%;
+              margin-bottom: -50px;
+              text-decoration: none;
+              display: inline-block;
+            "
           >
             Continue with Phone
-          </button>
+          </a>
         </div>
       </div>
 
@@ -208,13 +215,19 @@
           Sign in with Phone
         </h3>
         <br />
-        <button
-          type="submit"
+        <a
+          href="{% url 'phone_auth' %}"
           class="btn1 animation"
-          style="--i: 29; --j: 12; margin-bottom: -50px"
+          style="
+            --i: 29;
+            --j: 12;
+            margin-bottom: -50px;
+            text-decoration: none;
+            display: inline-block;
+          "
         >
           Continue with Phone
-        </button>
+        </a>
       </div>
     </div>
 
