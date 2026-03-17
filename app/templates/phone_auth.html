@@ -19,125 +19,190 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css"
     />
     <link rel="stylesheet" href="{% static 'css/index.css' %}" />
-    <style>
-      .phone-auth-container {
-        max-width: 450px;
-        margin: 50px auto;
-        padding: 40px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
-      }
-      .phone-auth-header {
-        text-align: center;
-        margin-bottom: 40px;
-      }
-      .phone-auth-header h2 {
-        color: #007726;
-        font-weight: bold;
-        margin-bottom: 10px;
-      }
-      .phone-auth-header p {
-        color: #666;
-        margin: 0;
-      }
-      .form-control {
-        padding: 12px 15px;
-        font-size: 16px;
-        border: 2px solid #e0e0e0;
-        transition: border-color 0.3s ease;
-      }
-      .form-control:focus {
-        border-color: #007726;
-        box-shadow: 0 0 0 0.2rem rgba(0, 119, 38, 0.1);
-      }
-      .btn-send {
-        width: 100%;
-        padding: 12px;
-        font-size: 16px;
-        font-weight: bold;
-        background-color: #007726;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-        margin-top: 20px;
-      }
-      .btn-send:hover {
-        background-color: #005a1f;
-        color: white;
-        text-decoration: none;
-      }
-      .form-error {
-        color: #dc3545;
-        font-size: 14px;
-        margin-top: 5px;
-        border-left: 3px solid #dc3545;
-        padding-left: 10px;
-      }
-      .back-link {
-        text-align: center;
-        margin-top: 20px;
-      }
-      .back-link a {
-        color: #007726;
-        text-decoration: none;
-        font-weight: 500;
-      }
-      .back-link a:hover {
-        text-decoration: underline;
-      }
-      .help-text-small {
-        color: #999;
-        font-size: 12px;
-        margin-top: 5px;
-      }
-    </style>
-  </head>
-  <body style="background: linear-gradient(135deg, #f5f5f5 0%, #e8f5e9 100%)">
-    <div class="phone-auth-container">
-      <div class="phone-auth-header">
-        <h2>Sign In with Phone</h2>
-        <p>Enter your phone number to get started</p>
-      </div>
 
-      <form method="POST">
+<style>
+    /* 1. LAYOUT & BACKGROUND */
+    /* We target the body but use !important to ensure it doesn't double-render or clash with base.html */
+    body {
+        /* A lush, organic gradient: Forest Green to Deep Moss */
+        background: linear-gradient(135deg, #064e3b 0%, #14532d 50%, #166534 100%) !important;
+        min-height: 100vh;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Inter', -apple-system, sans-serif;
+        /* Optional: Adding a very subtle grain texture to make it feel more organic */
+        background-attachment: fixed;
+    }
+
+    /* Updated the card shadow to be softer and more 'green-tinted' for blending */
+    .phone-auth-container {
+        background: #104e18;
+        padding: 90px;
+        border-radius: 30px;
+        width: 100%;
+        max-width: 750px;
+        box-shadow: 0 30px 60px -12px rgba(6, 78, 59, 0.6);
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Top Accent Stripe matching CRPAS Logo */
+    .phone-auth-container::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 6px;
+        background: linear-gradient(90deg, #D4E157, #26A69A);
+    }
+
+    /* 3. TYPOGRAPHY */
+    .phone-auth-header h2 {
+        color: #0f172a;
+        font-size: 35px;
+        font-weight: 800;
+        margin: 0 0 8px 0;
+        text-align: center;
+        letter-spacing: 0.1px;
+    }
+
+    .phone-auth-header p {
+        color: #64748b;
+        font-size: 30px;
+        text-align: center;
+        margin: 0 0 30px 0;
+    }
+
+    .form-label {
+        color:  #f8fafc
+        font-weight: 700;
+        font-size: 22px;
+        margin-bottom: 10px;
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    /* 4. INPUTS - Targeted for Django compatibility */
+    .phone-auth-container input {
+        width: 100% !important;
+        padding: 14px 16px !important;
+        background: #f8fafc !important;
+        border: 4px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        color: #0f172a !important;
+        font-size: 20px !important;
+        transition: all 0.3s ease !important;
+        box-sizing: border-box !important;
+        display: block !important;
+    }
+
+    .phone-auth-container input:focus {
+        outline: none !important;
+        border-color: #26A69A !important;
+        background: #ffffff !important;
+        box-shadow: 0 0 0 4px rgba(38, 166, 154, 0.15) !important;
+    }
+
+    /* 5. THE BUTTON - Lime-Teal Gradient */
+    .btn-send {
+        width: 100%;
+        background: linear-gradient(90deg, #D4E157, #26A69A);
+        color: #0f172a;
+        border: none;
+        padding: 16px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 22px;
+        cursor: pointer;
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-send:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(38, 166, 154, 0.3);
+    }
+
+    /* 6. UTILITIES */
+    .help-text-small {
+        color: #94a3b8;
+        font-size: 20px;
+        margin-top: 8px;
+    }
+
+    .error-msg {
+        color: #e11d48;
+        background: #fff1f2;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-top: 10px;
+        border-left: 4px solid #e11d48;
+    }
+
+    .back-link {
+        margin-top: 25px;
+        text-align: center;
+        padding-top: 20px;
+    }
+
+    .back-link a {
+        color: #cad8dd;
+        text-decoration: none;
+        font-size: 30px;
+        font-weight: 600;
+    }
+</style>
+ <!-- Background image on the left side -->
+    <div class="login-bg-section">
+      <img
+        src="{% static 'images/login-section-image.png' %}"
+        alt="Login Background"
+        class="login-bg-image"
+      />
+    </div>
+<div class="phone-auth-container">
+    <div class="phone-auth-header">
+        <h2>Secure Sign In</h2>
+        <p>Agricultural Advisory System</p>
+    </div>
+
+    <form method="POST">
         {% csrf_token %}
 
-        <div class="mb-3">
-          <label for="{{ form.phone.id_for_label }}" class="form-label">
-            <i class="bx bxs-phone"></i> Phone Number
-          </label>
-          {{ form.phone }} {% if form.phone.errors %}
-          <div class="form-error">
-            {% for error in form.phone.errors %}
-            <p>{{ error }}</p>
-            {% endfor %}
-          </div>
-          {% endif %}
-          <div class="help-text-small">Format: +254712345678 or 0712345678</div>
+        <div style="margin-bottom: 24px;">
+            <label for="{{ form.phone.id_for_label }}" class="form-label">
+                <i class="bx bxs-phone"></i> Phone Number
+            </label>
+            
+            {{ form.phone }}
+            
+            <div class="help-text-small">Format: +254...</div>
+            
+            {% if form.phone.errors %}
+                <div class="error-msg">
+                    {% for error in form.phone.errors %}{{ error }}{% endfor %}
+                </div>
+            {% endif %}
         </div>
 
         <button type="submit" class="btn-send">
-          <i class="bx bxs-send"></i> Send Verification Code
+            <i class="bx bxs-send"></i> Send Verification Code
         </button>
+    </form>
 
-        {% if form.non_field_errors %}
-        <div class="alert alert-danger mt-3" role="alert">
-          {% for error in form.non_field_errors %}
-          <p>{{ error }}</p>
-          {% endfor %}
-        </div>
-        {% endif %}
-      </form>
-
-      <div class="back-link">
-        <a href="{% url 'auth' %}"
-          ><i class="bx bx-arrow-back"></i> Back to Login</a
-        >
-      </div>
+    <div class="back-link">
+        <a href="{% url 'auth' %}">
+            <i class="bx bx-arrow-back"></i> Back to Login
+        </a>
     </div>
+</div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Toastr JS for notifications -->

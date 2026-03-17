@@ -8,9 +8,7 @@ CRPAS{% endblock %} {% block navbar_link %}
   <div class="row h-100">
     <!-- Sidebar with Farmer Info and Chat History -->
     <div
-      class="col-md-3 bg-light d-flex flex-column"
-      style="max-height: calc(100vh - 80px); overflow-y: auto"
-    >
+      class="col-md-3 bg-light d-flex flex-column">
       <!-- New Chat Button -->
       <div>
         <a
@@ -168,7 +166,7 @@ CRPAS{% endblock %} {% block navbar_link %}
       <!-- Logout Button -->
       <a
         href="{% url 'dashboard' %}"
-        class="btn btn-outline-secondary w-100 mt-3"
+        class="btn btn-outline-secondary w-80 mt-3"
       >
         <i class="bx bx-arrow-back"></i> Back to Dashboard
       </a>
@@ -248,7 +246,7 @@ CRPAS{% endblock %} {% block navbar_link %}
                 id="send-btn"
                 style="
                   border-radius: 0 25px 25px 0;
-                  padding: 12px 30px;
+                  padding: 10px 30px;
                   font-weight: bold;
                 "
               >
@@ -276,15 +274,29 @@ CRPAS{% endblock %} {% block navbar_link %}
   .container-fluid {
     min-height: calc(100vh - 60px);
     padding-top: 20px;
-  }
+    display: flex;       /* Add this */
+    flex-direction: column; /* Add this */
+}
 
-  /* Sidebar styles */
+/* Add this new rule to target the row inside the container */
+.container-fluid > .row {
+    flex: 1;            /* This forces the row to take up all available height */
+    display: flex;
+}
+
   .col-md-3 {
     background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
     border-radius: 10px;
     padding: 20px !important;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
+    
+    /* The Fixes */
+    display: flex;
+    flex-direction: column;
+    height: auto; 
+    align-self: stretch; /* Forces it to match the height of the main content column */
+    margin-bottom: 20px; /* Gives it a little gap before the green footer */
+}
 
   .chat-thread-item {
     border-left: 4px solid #ddd;
@@ -312,14 +324,15 @@ CRPAS{% endblock %} {% block navbar_link %}
     transform: scale(1.15);
   }
 
-  /* Messages container */
+  /* Update your message container height to fill more space */
   #messages-container {
-    max-height: 60vh;
+    height: 70vh; /* Increased from 60vh to make it longer */
     border-radius: 12px;
     background: #ffffff !important;
     border: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  }
+    overflow-y: auto; /* Ensure it scrolls */
+}
 
   /* Message bubbles */
   .bubble-user {
