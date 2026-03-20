@@ -300,38 +300,41 @@
       }
 
      /* Container to match your Dashboard's length */
-.dashboard-width-fixer {
+.contact-section {
   width: 100%;
   display: flex;
   justify-content: center;
-  background-color: #031602; /* Matches the background in the image */
+  background: #08291a;
 }
 
 .contact-modern-minimal {
   width: 100%;
-  max-width: 1400px; /* Adjust this to match your specific dashboard max-width */
-  padding: 30px 5px;
+  max-width: 1400px;
+  padding: 40px 20px;
   color: #ccd7de;
   box-sizing: border-box;
 }
 
 .contact-top {
-  margin-bottom: 1px;
+  margin-bottom: 30px;
+  text-align: center;
 }
 
 .contact-header-content h1 {
-  font-size: 3.5rem; /* Slightly reduced to look better in a dashboard */
+  font-size: 2.5rem;
   font-weight: 700;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   letter-spacing: -1.5px;
 }
 
 .subtitle {
-  font-size: 1.1rem;
+  font-size: 1rem;
   line-height: 1.5;
   opacity: 0.8;
-  margin-bottom: 20px;
-  max-width: 550px; /* Keeps text from stretching too far */
+  margin-bottom: 0;
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .direct-contact-info {
@@ -344,7 +347,7 @@
   text-decoration: none;
   color: #cfe1ed;
   font-weight: 500;
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .info-item-link {
@@ -359,29 +362,60 @@
 .contact-bottom-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 30px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  padding-top: 40px;
+  gap: 100px;
+  padding-top: 0;
+}
+
+.grid-col {
+  background: rgba(0, 119, 26, 0.15);
+  border: 1px solid rgba(0, 119, 26, 0.3);
+  border-radius: 12px;
+  padding: 25px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.grid-col:hover {
+  background: rgba(0, 119, 26, 0.25);
+  border-color: rgba(0, 119, 26, 0.6);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 119, 26, 0.2);
 }
 
 .grid-col h3 {
-  font-size: 1rem;
+  font-size: 1.2rem;
   font-weight: 700;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   text-transform: none;
+  color: #ffffff;
 }
 
 .grid-col p {
-  font-size: 0.9rem;
-  line-height: 1.4;
-  opacity: 0.7;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  opacity: 0.85;
+  margin: 0;
+}
+
+/* Image Placeholder Hidden */
+.image-placeholder {
+  display: none !important;
+}
+
+.background-wrapper {
+  position: relative;
+  z-index: 1;
 }
 
 /* Mobile Tweak */
 @media (max-width: 900px) {
   .contact-bottom-grid {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 15px;
+  }
+  
+  .contact-header-content h1 {
+    font-size: 2rem;
   }
 }
     </style>
@@ -502,7 +536,9 @@
       </p>
     </header>
 
-    <div class="container">
+    <div style="position: relative; background: linear-gradient(135deg, rgba(8, 41, 26, 0.7) 0%, rgba(8, 41, 26, 0.7) 100%), url('{% static 'images/maize-beans-dashboard.png' %}'); background-size: cover; background-attachment: fixed; background-position: center;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: inherit; filter: blur(4px); z-index: 0;"></div>
+      <div class="container background-wrapper">
       <!-- Farmer and Farms Section -->
       {% if farmer %}
       <section class="reveal" style="margin-bottom: 60px">
@@ -600,25 +636,25 @@
 
       <section class="app-description">
         <div class="reveal">
-          <h2 style="font-size: 2.5rem; margin-bottom: 20px; color: #2d5a27;">
+          <h2 style="font-size: 2.5rem; margin-bottom: 20px; color: #5ab34f;">
             Revolutionizing Your Yield
           </h2>
           
           <div class="styled-card">
-            <h3>[Insert Core Goal Here]</h3>
+            <h3>Providing Reliable, Data-Driven Advice on Maize & Beans</h3>
             <p>
-              Instead of just tracking growth, we focus on [Primary Benefit], 
-              giving you the data needed to make smarter agricultural decisions.
+              Instead of just tracking growth, we focus on real-time climate insights and soil health monitoring, 
+              giving you the data needed to make smarter agricultural decisions for your crops.
             </p>
           </div>
           
           <br />
           
           <div class="styled-card">
-            <h3>[Insert Secondary Goal Here]</h3>
+            <h3>Empower Kenyan Farmers with Precision, Location-Based Guidance</h3>
             <p>
               Bridging the gap between traditional farming and modern precision 
-              by focusing specifically on [Specific Feature].
+              by delivering timely, location-specific crop advisories tailored to your region and farming needs.
             </p>
           </div>
         </div>
@@ -630,12 +666,11 @@
           />
         </div>
       </section>
-
-
-
+      </div>
+    </div>
   </section>
 </div>
-  <div class="dashboard-width-fixer">
+  <div class="contact-section">
   <section class="contact-modern-minimal">
     <div class="contact-top">
       <div class="contact-header-content">
@@ -643,18 +678,17 @@
         <p class="subtitle">
           Email, call, or reach out to learn how Crpas AI can provide you with the best agricultural data and insights for your farm.
         </p>
-        
-        <div class="direct-contact-info">
-          <a href="mailto:hello@crpas.ai" class="info-item">hello@crpas.ai</a>
-          <a href="tel:+2547026411680" class="info-item">+254 702 641 680</a>
-          <a href="#" class="info-item-link">Customer Support</a>
-        </div>
       </div>
     </div>
     <div class="contact-bottom-grid">
       <div class="grid-col">
         <h3>Customer Support</h3>
         <p>Our support team is available around the clock to address any concerns or queries.</p>
+        <br>
+        <div class="direct-contact-info">
+          <p>Email: <a href="mailto:hello@crpas.ai" class="info-item">hello@crpas.ai</a></p>
+          <p>Phone: <a href="tel:+2547026411680" class="info-item">+254 702 641 680</a></p>
+        </div>
       </div>
       
       <div class="grid-col">
@@ -664,7 +698,7 @@
 
       <div class="grid-col">
         <h3>Media Inquiries</h3>
-        <p>For media-related questions, please contact our team at press@crpas.ai.</p>
+        <p>For media-related questions, please contact our team at <a href="mailto:press@crpas.ai" class="info-item">press@crpas.ai</a>.</p>
       </div>
     </div>
     <script>

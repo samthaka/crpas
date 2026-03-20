@@ -259,6 +259,10 @@ body{
     font-weight: 600;
     z-index: 1;
     overflow: hidden;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn1::before{

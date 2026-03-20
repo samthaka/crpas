@@ -892,7 +892,7 @@ def reverse_geocode_api(request):
             'message': 'Could not geocode coordinates. Please enter location manually.'
         }, status=400)
 
-# @login_required(login_url='auth')
+@login_required(login_url='auth')
 def conversation_view(request):
     """
     Conversation page where the farmer can chat with an agricultural advisor.
