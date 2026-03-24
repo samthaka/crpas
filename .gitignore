@@ -1,3 +1,4 @@
+!county-data/kenya_admin.db
 db.sqlite3
 .env
 __pycache__/
@@ -16,3 +17,7 @@ __pycache__/
 dist/
 build/
 *.coverage
+client_secret_136116295525-9h3shv32npmdslhllb6h92andsekh583.apps.googleusercontent.com.json
+client_secret_71139075617-9d739l0rkqjur68j8ukteo9mtersl3bf.apps.googleusercontent.com.json
+*.md
+data.json

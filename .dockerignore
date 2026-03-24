@@ -1,3 +1,6 @@
+# make sure the kenya_admin.db is not ignored by docker
+!county-data/kenya_admin.db
+
 # Python
 __pycache__/
 *.py[cod]

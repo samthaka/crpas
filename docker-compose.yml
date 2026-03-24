@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15
+    container_name: crpas_db
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - crpas_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   web:
     build: .
     container_name: crpas_app
@@ -8,25 +27,38 @@ services:
     volumes:
       # Mount the entire project for development
       - .:/app
-      # Mount data directory for SQLite database persistence
-      - crpas_data:/app/data
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      - DB_HOST=db
+      - DB_PORT=5432
     env_file:
       - .env
     stdin_open: true
     tty: true
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - crpas_network
 
-  # Optional: Database management tool for SQLite (if needed)
-  # You can access SQLite database through the web container
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: crpas_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - crpas_network
 
 volumes:
-  crpas_data:
+  postgres_data:
     driver: local
 
 networks:

@@ -6,10 +6,10 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "crpas.settings")
 django.setup()
 
 # Code starts here
-from app.models import Farmer
+from app.models import Farm
 from app.utils import get_rainfall_forecast, get_soil_data, generate_advisory
 
-farmer = Farmer.objects.first()  # or create one
-forecast = get_rainfall_forecast(farmer.lat, farmer.long)
-soil = get_soil_data(farmer.lat, farmer.long)
-print(generate_advisory(farmer, forecast, soil))
+farm = Farm.objects.first()  # or create one
+forecast = get_rainfall_forecast(farm.lat, farm.long)
+soil = get_soil_data(farm.lat, farm.long)
+print(generate_advisory(farm, forecast, soil))
