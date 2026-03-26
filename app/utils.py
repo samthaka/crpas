@@ -823,14 +823,34 @@ def chat_with_advisor(farm, chat_thread, user_message):
         forecast_data = get_rainfall_forecast(actual_lat, actual_lon, days=10)
         soil_data = get_soil_data(actual_lat, actual_lon)
         
-        # Log data fetch results
-        if isinstance(forecast_data, dict) and 'error' in forecast_data:
-            logger.error(f"[ADVISOR DEBUG] Rainfall forecast API failed: {forecast_data['error']}")
+        # Check if APIs failed and try fallback to cached data
+        if (isinstance(forecast_data, dict) and 'error' in forecast_data) or not forecast_data:
+            logger.warning(f"[ADVISOR DEBUG] Rainfall forecast API failed, attempting fallback to cached data...")
+            try:
+                from app.models import WeatherDataCache
+                last_cache = farm.weather_cache.filter(fetch_success=True).order_by('-fetched_at').first()
+                if last_cache:
+                    forecast_data = last_cache.forecast_data
+                    logger.info(f"[ADVISOR DEBUG] Using cached forecast from {last_cache.fetched_at}")
+                else:
+                    logger.warning(f"[ADVISOR DEBUG] No cached weather data available for fallback")
+            except Exception as e:
+                logger.warning(f"[ADVISOR DEBUG] Fallback cache lookup failed: {str(e)}")
         else:
             logger.info(f"[ADVISOR DEBUG] Rainfall forecast retrieved successfully: {len(forecast_data)} days")
         
         if isinstance(soil_data, dict) and 'error' in soil_data:
-            logger.error(f"[ADVISOR DEBUG] Soil data API failed: {soil_data['error']}")
+            logger.warning(f"[ADVISOR DEBUG] Soil data API failed, attempting fallback...")
+            try:
+                from app.models import WeatherDataCache
+                last_cache = farm.weather_cache.filter(fetch_success=True).order_by('-fetched_at').first()
+                if last_cache and last_cache.soil_data:
+                    soil_data = last_cache.soil_data
+                    logger.info(f"[ADVISOR DEBUG] Using cached soil data from {last_cache.fetched_at}")
+                else:
+                    logger.warning(f"[ADVISOR DEBUG] No cached soil data available for fallback")
+            except Exception as e:
+                logger.warning(f"[ADVISOR DEBUG] Fallback cache lookup failed: {str(e)}")
         else:
             logger.info(f"[ADVISOR DEBUG] Soil data retrieved successfully")
         

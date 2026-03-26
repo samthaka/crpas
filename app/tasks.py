@@ -9,6 +9,7 @@ This protects farmers from making wrong decisions based on inaccurate informatio
 
 import logging
 import time
+from datetime import timedelta
 from django.utils import timezone
 from app.models import Farmer, Farm
 from app.notification_utils import create_and_send_notification
@@ -292,3 +293,349 @@ def _send_advisory_to_farmer(farmer):
     except Exception as e:
         logger.exception(f"Unexpected error processing advisory for {farmer}: {str(e)}")
         return 'error'
+
+
+# ============================================================================
+# PERIODIC WEATHER DATA FETCH & RISK ANALYSIS (Every 6 hours)
+# ============================================================================
+
+def periodic_fetch_and_analyze_weather():
+    """
+    Scheduled task to fetch weather data every 6 hours and analyze for risks.
+    Stores data as fallback for when APIs fail, and uses it to detect:
+    - Flood risk
+    - Pest infestation risk
+    - Dry spell risk
+    
+    Runs every 6 hours at: 12:00 AM, 6:00 AM, 12:00 PM, 6:00 PM (UTC)
+    Sends immediate notifications for HIGH/CRITICAL risks.
+    Also aggregates regional risks and sends county-level alerts.
+    
+    This is the core of the "realtime fallback + risk detection" system.
+    """
+    logger.info("=" * 80)
+    logger.info(f"🔄 Starting 6-hourly weather data fetch & risk analysis at {timezone.now()}")
+    logger.info("=" * 80)
+    
+    try:
+        from app.models import Farm, WeatherDataCache, RiskAlert, Notification
+        from app.risk_analysis import analyze_weather_for_risks, generate_personalized_risk_notification
+        
+        # Get all farms
+        farms = Farm.objects.filter(lat__isnull=False, long__isnull=False).select_related('farmer')
+        
+        if not farms.exists():
+            logger.warning("No farms with GPS coordinates found - skipping weather fetch")
+            return
+        
+        logger.info(f"Processing {farms.count()} farms for weather data fetch and risk analysis")
+        
+        fetch_success_count = 0
+        fetch_failed_count = 0
+        risk_detected_count = 0
+        notification_sent_count = 0
+        
+        for farm in farms:
+            try:
+                _process_farm_weather_and_risks(farm)
+                fetch_success_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing farm {farm.id}: {str(e)}")
+                fetch_failed_count += 1
+        
+        logger.info("=" * 80)
+        logger.info(f"6-Hourly weather fetch & risk analysis completed:")
+        logger.info(f"  ✓ Successfully processed: {fetch_success_count}")
+        logger.info(f"  ✗ Failed: {fetch_failed_count}")
+        logger.info("=" * 80)
+        
+        # STEP 5: Aggregate regional risks and send regional notifications
+        logger.info("\n📍 Starting regional risk aggregation...")
+        aggregate_and_send_regional_risk_alerts()
+        
+    except Exception as e:
+        logger.exception(f"Fatal error in periodic weather fetch task: {str(e)}")
+
+
+def _process_farm_weather_and_risks(farm):
+    """
+    Process a single farm: fetch weather, cache it, analyze risks, send alerts.
+    
+    Args:
+        farm (Farm): Farm to process
+    """
+    from app.models import WeatherDataCache, RiskAlert
+    from app.risk_analysis import analyze_weather_for_risks, generate_personalized_risk_notification
+    
+    try:
+        # STEP 1: Fetch weather data with retry logic
+        logger.info(f"[FARM {farm.id}] Fetching weather data for {farm.farmer.fname} - {farm.ward or 'N/A'}")
+        
+        forecast_data, forecast_success = _fetch_weather_data_with_retry(farm.lat, farm.long)
+        soil_data, soil_success = _fetch_soil_data_with_retry(farm.lat, farm.long)
+        
+        if not forecast_success:
+            logger.warning(f"[FARM {farm.id}] Could not fetch forecast data - will try fallback")
+            # Try to use cached data from previous fetch
+            last_cache = farm.weather_cache.filter(fetch_success=True).order_by('-fetched_at').first()
+            if last_cache:
+                forecast_data = last_cache.forecast_data
+                logger.info(f"[FARM {farm.id}] Using cached forecast from {last_cache.fetched_at}")
+            else:
+                logger.error(f"[FARM {farm.id}] No fallback data available - skipping")
+                return
+        
+        # STEP 2: Cache the weather data
+        cache_entry = WeatherDataCache.objects.create(
+            farm=farm,
+            latitude=farm.lat,
+            longitude=farm.long,
+            forecast_data=forecast_data if forecast_success else {},
+            soil_data=soil_data if soil_success else {},
+            fetch_success=forecast_success or soil_success,
+            fetch_error="Weather API failed" if not forecast_success else ""
+        )
+        logger.info(f"[FARM {farm.id}] Cached weather data (entry {cache_entry.id})")
+        
+        # Skip analysis if no data
+        if not forecast_data:
+            logger.warning(f"[FARM {farm.id}] No valid forecast data - skipping risk analysis")
+            return
+        
+        # STEP 3: Analyze weather for risks using LLM
+        logger.info(f"[FARM {farm.id}] Analyzing weather data for risks using Groq LLM...")
+        analysis_result = analyze_weather_for_risks(farm, forecast_data, soil_data)
+        
+        if not analysis_result['success']:
+            logger.error(f"[FARM {farm.id}] Risk analysis failed: {analysis_result.get('error')}")
+            return
+        
+        risks = analysis_result.get('risks', [])
+        logger.info(f"[FARM {farm.id}] LLM detected {len(risks)} potential risks")
+        
+        # Mark cache as analyzed
+        cache_entry.analyzed = True
+        cache_entry.save()
+        
+        # STEP 4: Create RiskAlert objects and send notifications
+        for risk_data in risks:
+            # Only create alerts for detected risks (probability > 20)
+            if risk_data.get('probability_score', 0) < 20:
+                continue
+            
+            try:
+                risk_type = risk_data['risk_type']
+                risk_level = risk_data['risk_level']
+                
+                logger.info(f"[FARM {farm.id}] Creating risk alert: {risk_level.upper()} {risk_type}")
+                
+                # Create RiskAlert
+                risk_alert = RiskAlert.objects.create(
+                    farm=farm,
+                    weather_cache=cache_entry,
+                    risk_type=risk_type,
+                    risk_level=risk_level,
+                    affected_crop=risk_data.get('affected_crop', 'both'),
+                    description=risk_data.get('description', 'Risk detected'),
+                    recommendation=risk_data.get('recommendation', 'Consult with extension officer'),
+                    probability_score=risk_data.get('probability_score', 0)
+                )
+                
+                # Send immediate notification for HIGH and CRITICAL risks
+                if risk_level in ['high', 'critical']:
+                    _send_risk_alert_notification(farm, risk_alert)
+                
+            except Exception as e:
+                logger.error(f"[FARM {farm.id}] Error creating risk alert: {str(e)}")
+                continue
+        
+        logger.info(f"[FARM {farm.id}] ✓ Weather fetch & analysis complete")
+        
+    except Exception as e:
+        logger.error(f"[FARM {farm.id}] Unexpected error: {str(e)}")
+        raise
+
+
+def _send_risk_alert_notification(farm, risk_alert):
+    """
+    Send an immediate notification for a detected HIGH/CRITICAL risk.
+    
+    Args:
+        farm (Farm): The affected farm
+        risk_alert (RiskAlert): The risk alert
+    """
+    from app.risk_analysis import generate_personalized_risk_notification
+    
+    try:
+        farmer = farm.farmer
+        
+        # Generate personalized message
+        msg_data = generate_personalized_risk_notification(farmer, farm, risk_alert)
+        
+        # Send notification immediately
+        notification = create_and_send_notification(
+            farmer=farmer,
+            title=msg_data['title'],
+            message=msg_data['message'],
+            notification_type='risk_alert',  # Will need to add this type if not present
+            metadata={
+                'risk_type': risk_alert.risk_type,
+                'risk_level': risk_alert.risk_level,
+                'probability_score': risk_alert.probability_score,
+                'affected_crop': farm.get_crop_type_display(),
+                'triggered_at': timezone.now().isoformat(),
+            },
+            send_async=True
+        )
+        
+        if notification:
+            risk_alert.notification = notification
+            risk_alert.notification_sent = True
+            risk_alert.save()
+            
+            logger.info(f"✓ Risk alert notification sent to {farmer.fname}")
+            logger.info(f"   Risk: {risk_alert.get_risk_type_display()} ({risk_alert.get_risk_level_display()})")
+            logger.info(f"   Probability: {risk_alert.probability_score}%")
+        
+    except Exception as e:
+        logger.error(f"Failed to send risk alert notification: {str(e)}")
+
+
+# ============================================================================
+# REGIONAL RISK AGGREGATION & ALERTS
+# ============================================================================
+
+def aggregate_and_send_regional_risk_alerts():
+    """
+    Aggregates detected risks by region and sends regional alerts.
+    Runs after periodic_fetch_and_analyze_weather to consolidate risks.
+    
+    Groups risks by county/sub_county and sends alerts when:
+    - Multiple farms in same region have HIGH/CRITICAL risks
+    - Or a single farm has CRITICAL risk
+    """
+    from app.models import RiskAlert, RegionalNotification
+    
+    logger.info("=" * 80)
+    logger.info(f"🔄 Starting regional risk aggregation at {timezone.now()}")
+    logger.info("=" * 80)
+    
+    try:
+        # Get all HIGH/CRITICAL risks from the last 2 hours
+        recent_cutoff = timezone.now() - timedelta(hours=2)
+        recent_risks = RiskAlert.objects.filter(
+            risk_level__in=['high', 'critical'],
+            created_at__gte=recent_cutoff
+        ).select_related('farm', 'farm__farmer')
+        
+        if not recent_risks.exists():
+            logger.info("No recent high-risk alerts to aggregate")
+            return
+        
+        logger.info(f"Found {recent_risks.count()} recent high-risk alerts to aggregate")
+        
+        # Group by county
+        risks_by_region = {}
+        for risk in recent_risks:
+            county = risk.farm.county or 'Unknown'
+            if county not in risks_by_region:
+                risks_by_region[county] = []
+            risks_by_region[county].append(risk)
+        
+        # Create regional notifications for counties with multiple high risks
+        for county, risks in risks_by_region.items():
+            if len(risks) >= 2 or any(r.risk_level == 'critical' for r in risks):
+                _create_regional_risk_summary(county, risks)
+        
+        logger.info("=" * 80)
+        logger.info(f"Regional risk aggregation completed")
+        logger.info("=" * 80)
+        
+    except Exception as e:
+        logger.exception(f"Error in regional risk aggregation: {str(e)}")
+
+
+def _create_regional_risk_summary(county, risks):
+    """
+    Create a regional notification summarizing risks in a county.
+    
+    Args:
+        county (str): County name
+        risks (list): List of RiskAlert objects
+    """
+    from app.models import RegionalNotification
+    
+    try:
+        # Count risks by type
+        risk_counts = {}
+        critical_count = sum(1 for r in risks if r.risk_level == 'critical')
+        
+        for risk in risks:
+            key = f"{risk.get_risk_type_display()}"
+            if key not in risk_counts:
+                risk_counts[key] = {'count': 0, 'farms': []}
+            risk_counts[key]['count'] += 1
+            risk_counts[key]['farms'].append(risk.farm.farmer.fname)
+        
+        # Build message
+        title = f"🚨 Regional Risk Alert: {county} County" if critical_count > 0 else f"⚠️ Regional Weather Risk: {county} County"
+        
+        risk_summary = "\n".join([
+            f"- {risk_type}: {info['count']} farm(s) affected"
+            for risk_type, info in risk_counts.items()
+        ])
+        
+        message = f"""COUNTY-WIDE RISK SUMMARY: {county} County
+
+Multiple farms in your area have detected environmental risks:
+
+{risk_summary}
+
+AFFECTED CROPS:
+- Maize and/or Beans farms
+
+IMPACT:
+These risks could affect crop yield and viability. We recommend:
+1. Monitor weather developments closely
+2. Check individual farm alerts for specific recommendations
+3. Prepare defensive measures (irrigation, pest control, etc.)
+4. Consult with your local agricultural extension officer
+
+Stay alert! More updates coming as conditions develop.
+
+Visit your CRPAS dashboard for detailed farm-level alerts."""
+        
+        # Create regional notification
+        regional_notif = RegionalNotification.objects.create(
+            title=title,
+            message=message,
+            notification_type='risk_alert',
+            region_level='county',
+            region_name=county,
+            status='scheduled',
+            scheduled_for=timezone.now(),
+            send_via_website=True,
+            send_via_email=True,
+            send_via_sms=True,
+            metadata={
+                'aggregated_risks': len(risks),
+                'critical_count': critical_count,
+                'risk_breakdown': risk_counts,
+                'generated_from_risk_analysis': True
+            },
+            created_by='risk_analysis_system'
+        )
+        
+        logger.info(f"✓ Created regional risk notification for {county}: {regional_notif.id}")
+        
+        # Queue it for sending
+        from app.notification_utils import send_regional_notification
+        try:
+            send_regional_notification(regional_notif)
+            logger.info(f"✓ Regional risk alert sent to {county} farmers")
+        except Exception as e:
+            logger.error(f"Failed to send regional notification: {str(e)}")
+        
+    except Exception as e:
+        logger.error(f"Error creating regional risk summary: {str(e)}")

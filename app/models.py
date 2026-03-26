@@ -310,6 +310,7 @@ class Notification(models.Model):
         ('rainfall', 'Rainfall Alert'),
         ('dry_spell', 'Dry Spell Warning'),
         ('soil_moisture', 'Soil Moisture Alert'),
+        ('risk_alert', 'Risk Alert'),
         ('advisory', 'Advisory/General'),
     ]
 
@@ -360,6 +361,37 @@ class Notification(models.Model):
         blank=True,
         help_text="Additional metadata related to the notification"
     )
+    
+    # Region information (for tracking if this is part of a regional notification)
+    county = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="County where the farmer receiving this notification is located"
+    )
+    sub_county = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Sub-county where the farmer receiving this notification is located"
+    )
+    ward = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Ward where the farmer receiving this notification is located"
+    )
+    
+    # Link to parent regional notification (if any)
+    regional_notification = models.ForeignKey(
+        'RegionalNotification',
+        related_name='individual_notifications',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Parent regional notification if this was sent as part of a bulk campaign"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(
         null=True,
@@ -423,3 +455,398 @@ class NotificationTriggerLog(models.Model):
         verbose_name = "Notification Trigger Log"
         verbose_name_plural = "Notification Trigger Logs"
         ordering = ['-created_at']
+
+
+class RegionalNotification(models.Model):
+    """
+    Stores notifications sent to entire regions (counties, sub-counties, or wards).
+    These notifications are bulk-sent to all farmers in the specified region(s).
+    """
+    REGION_LEVEL_CHOICES = [
+        ('county', 'County'),
+        ('sub_county', 'Sub-County'),
+        ('ward', 'Ward'),
+    ]
+
+    NOTIFICATION_TYPE_CHOICES = [
+        ('weather_alert', 'Weather Alert'),
+        ('pest_alert', 'Pest/Disease Alert'),
+        ('advisory', 'Regional Advisory'),
+        ('market_update', 'Market Update'),
+        ('emergency', 'Emergency Alert'),
+        ('custom', 'Custom Regional Alert'),
+    ]
+
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('scheduled', 'Scheduled'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+
+    title = models.CharField(
+        max_length=200,
+        help_text="Title of the regional notification"
+    )
+    message = models.TextField(
+        help_text="Detailed message for the regional notification"
+    )
+    notification_type = models.CharField(
+        max_length=50,
+        choices=NOTIFICATION_TYPE_CHOICES,
+        default='advisory',
+        help_text="Type of regional notification"
+    )
+    
+    # Region targeting
+    region_level = models.CharField(
+        max_length=20,
+        choices=REGION_LEVEL_CHOICES,
+        default='county',
+        help_text="Geographic level for this notification"
+    )
+    region_name = models.CharField(
+        max_length=100,
+        help_text="Name of county, sub-county, or ward (depending on region_level)"
+    )
+    
+    # Alternative: specific sub-county or ward within a county
+    sub_region_names = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Optional list of specific sub-counties or wards within the region (for targeted alerts)"
+    )
+    
+    # Crop type targeting (optional - send to all crops if empty)
+    crop_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Optional list of crop types to target (empty = all crops)"
+    )
+    
+    # Notification settings
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',
+        help_text="Current status of the notification"
+    )
+    
+    # Sending options
+    send_via_website = models.BooleanField(
+        default=True,
+        help_text="Send notification via website/dashboard"
+    )
+    send_via_email = models.BooleanField(
+        default=True,
+        help_text="Send notification via email"
+    )
+    send_via_sms = models.BooleanField(
+        default=True,
+        help_text="Send notification via SMS"
+    )
+    
+    # Scheduling
+    scheduled_for = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Schedule notification for future sending (leave empty to send immediately)"
+    )
+    
+    # Metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional metadata (e.g., weather data, pest info, market prices)"
+    )
+    
+    # Tracking
+    created_by = models.CharField(
+        max_length=100,
+        default='system',
+        help_text="User or system that created this notification"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when notification was sent"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Statistics
+    target_farmer_count = models.IntegerField(
+        default=0,
+        help_text="Number of farmers targeted by this notification"
+    )
+    sent_count = models.IntegerField(
+        default=0,
+        help_text="Number of notifications successfully sent"
+    )
+    failed_count = models.IntegerField(
+        default=0,
+        help_text="Number of notifications that failed to send"
+    )
+
+    def __str__(self):
+        return f"{self.notification_type.upper()} - {self.region_name}: {self.title}"
+
+    class Meta:
+        verbose_name = "Regional Notification"
+        verbose_name_plural = "Regional Notifications"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'region_level']),
+            models.Index(fields=['region_name', 'region_level']),
+        ]
+
+
+class RegionalNotificationLog(models.Model):
+    """
+    Tracks individual notifications sent as part of a regional notification campaign.
+    Links individual notifications to their parent regional notification.
+    """
+    
+    regional_notification = models.ForeignKey(
+        RegionalNotification,
+        related_name='notification_logs',
+        on_delete=models.CASCADE,
+        help_text="Parent regional notification"
+    )
+    
+    farmer = models.ForeignKey(
+        Farmer,
+        related_name='regional_notification_logs',
+        on_delete=models.CASCADE,
+        help_text="Farmer who received the notification"
+    )
+    
+    notification = models.ForeignKey(
+        Notification,
+        related_name='regional_log',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The individual notification sent to this farmer"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        default='pending',
+        choices=[
+            ('pending', 'Pending'),
+            ('sent', 'Sent'),
+            ('failed', 'Failed'),
+            ('skipped', 'Skipped'),
+        ],
+        help_text="Status of notification delivery to this farmer"
+    )
+    
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Error message if delivery failed"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when notification was sent to farmer"
+    )
+
+    def __str__(self):
+        return f"{self.regional_notification.title} → {self.farmer}"
+
+    class Meta:
+        verbose_name = "Regional Notification Log"
+        verbose_name_plural = "Regional Notification Logs"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['regional_notification', 'status']),
+            models.Index(fields=['farmer', 'status']),
+        ]
+
+
+class WeatherDataCache(models.Model):
+    """
+    Stores cached weather data fetched every 6 hours as a fallback for API failures.
+    This data is used by the LLM to analyze risks (floods, pest infestation, dry spells).
+    """
+    farm = models.ForeignKey(
+        Farm,
+        related_name='weather_cache',
+        on_delete=models.CASCADE,
+        help_text="The farm for which weather data is cached"
+    )
+    
+    # Weather data snapshot
+    latitude = models.FloatField(
+        help_text="Farm latitude"
+    )
+    longitude = models.FloatField(
+        help_text="Farm longitude"
+    )
+    
+    # Raw weather forecast data (JSON array of daily forecasts)
+    # Format: [{"date": "2025-03-24", "temp_min": 15, "temp_max": 28, "rain_mm": 5, "prob_max": 60, ...}, ...]
+    forecast_data = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Cached weather forecast data from Open-Meteo (10 days)"
+    )
+    
+    # Soil data snapshot
+    soil_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Cached soil moisture and temperature data"
+    )
+    
+    # Timestamp when this data was fetched
+    fetched_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this weather data was fetched"
+    )
+    
+    # Whether this data was used for risk analysis
+    analyzed = models.BooleanField(
+        default=False,
+        help_text="Whether this data has been analyzed for risks"
+    )
+    
+    # Store the API response status
+    fetch_success = models.BooleanField(
+        default=True,
+        help_text="Whether the API fetch was successful"
+    )
+    
+    fetch_error = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Error message if fetch failed"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        status = "✓" if self.fetch_success else "✗"
+        return f"{status} {self.farm} weather cache ({self.fetched_at:%Y-%m-%d %H:%M})"
+
+    class Meta:
+        verbose_name = "Weather Data Cache"
+        verbose_name_plural = "Weather Data Caches"
+        ordering = ['-fetched_at']
+        indexes = [
+            models.Index(fields=['farm', '-fetched_at']),
+            models.Index(fields=['analyzed', 'fetch_success']),
+        ]
+
+
+class RiskAlert(models.Model):
+    """
+    Stores detected environmental risks (floods, pest infestation, dry spells)
+    that were identified by the LLM during weather data analysis.
+    Linked to WeatherDataCache to trace which data triggered the alert.
+    """
+    RISK_LEVELS = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+    
+    RISK_TYPES = [
+        ('flood', 'Flood Risk'),
+        ('pest', 'Pest Infestation'),
+        ('dry_spell', 'Dry Spell'),
+    ]
+    
+    CROP_CHOICES = [
+        ('maize', 'Maize'),
+        ('beans', 'Beans'),
+        ('both', 'Both Maize and Beans'),
+    ]
+    
+    farm = models.ForeignKey(
+        Farm,
+        related_name='risk_alerts',
+        on_delete=models.CASCADE,
+        help_text="The farm affected by this risk"
+    )
+    
+    weather_cache = models.ForeignKey(
+        WeatherDataCache,
+        related_name='detected_risks',
+        on_delete=models.CASCADE,
+        help_text="The weather data that triggered this risk alert"
+    )
+    
+    risk_type = models.CharField(
+        max_length=20,
+        choices=RISK_TYPES,
+        help_text="Type of risk detected"
+    )
+    
+    risk_level = models.CharField(
+        max_length=10,
+        choices=RISK_LEVELS,
+        default='medium',
+        help_text="Severity level of the risk"
+    )
+    
+    # Which crop(s) are affected
+    affected_crop = models.CharField(
+        max_length=20,
+        choices=CROP_CHOICES,
+        help_text="Which crop(s) are affected by this risk"
+    )
+    
+    # LLM's description of the risk
+    description = models.TextField(
+        help_text="Detailed explanation of the risk from LLM analysis"
+    )
+    
+    # LLM's recommendations
+    recommendation = models.TextField(
+        help_text="Recommended action to mitigate this risk"
+    )
+    
+    # Probability score (0-100) from LLM analysis
+    probability_score = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="LLM's confidence score (0-100) that this risk will occur"
+    )
+    
+    # Notification tracking
+    notification_sent = models.BooleanField(
+        default=False,
+        help_text="Whether a notification was sent for this risk"
+    )
+    
+    notification = models.ForeignKey(
+        Notification,
+        related_name='triggered_by_risk',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The notification sent for this risk alert"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.get_risk_level_display()} {self.get_risk_type_display()} - {self.farm} ({self.created_at:%Y-%m-%d %H:%M})"
+
+    class Meta:
+        verbose_name = "Risk Alert"
+        verbose_name_plural = "Risk Alerts"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['farm', '-created_at']),
+            models.Index(fields=['risk_level', 'notification_sent']),
+            models.Index(fields=['risk_type', 'affected_crop']),
+        ]
