@@ -1041,7 +1041,7 @@ def delete_chat_view(request, thread_id):
     Handles both AJAX and regular POST requests.
     """
     try:
-        farmer = Farmer.objects.filter(phone=request.user.email).first() or Farmer.objects.first()
+        farmer = Farmer.objects.filter(email=request.user.email).first()
     except Farmer.DoesNotExist:
         messages.error(request, "Please complete your farmer registration first.")
         return redirect('farmer_registration')
