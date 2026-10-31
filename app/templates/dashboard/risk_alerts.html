@@ -1,0 +1,166 @@
+<!-- Risk Alerts Component -->
+<div class="risk-alerts-section" style="margin: 20px 0">
+  {% if risk_alerts %}
+  <div class="alert-container">
+    <h3
+      style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px"
+    >
+      <span style="font-size: 1.5em">⚠️</span>
+      Recent Risk Alerts
+    </h3>
+
+    <div style="display: grid; gap: 12px">
+      {% for alert in risk_alerts %}
+      <div
+        class="risk-alert-card"
+        style="
+                border-left: 4px solid 
+                {% if alert.risk_level == 'critical' %}#dc3545
+                {% elif alert.risk_level == 'high' %}#fd7e14
+                {% elif alert.risk_level == 'medium' %}#ffc107
+                {% else %}#17a2b8
+                {% endif %};
+                padding: 12px;
+                background: #f8f9fa;
+                border-radius: 4px;
+                margin-bottom: 8px;
+            "
+      >
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 8px;
+          "
+        >
+          <div>
+            <strong style="font-size: 1.1em">
+              {{ alert.get_risk_type_display }} Risk
+            </strong>
+            <span
+              style="
+                            background: 
+                            {% if alert.risk_level == 'critical' %}#dc3545
+                            {% elif alert.risk_level == 'high' %}#fd7e14
+                            {% elif alert.risk_level == 'medium' %}#ffc107
+                            {% else %}#17a2b8
+                            {% endif %};
+                            color: white;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            font-size: 0.85em;
+                            margin-left: 8px;
+                        "
+            >
+              {{ alert.get_risk_level_display }}
+            </span>
+          </div>
+          <small style="color: #666"
+            >{{ alert.created_at|date:"M d, H:i" }}</small
+          >
+        </div>
+
+        <p style="margin: 8px 0; color: #333">
+          <strong>Farm:</strong> {{ alert.farm.farm_name|default:alert.farm }}
+        </p>
+
+        <p style="margin: 8px 0; color: #333">
+          <strong>Affected Crop:</strong>
+          {% if alert.affected_crop == 'both' %} Maize and Beans {% elif
+          alert.affected_crop == 'maize' %} Maize {% else %} Beans {% endif %}
+        </p>
+
+        <p style="margin: 8px 0; color: #555; font-size: 0.95em">
+          {{ alert.description|truncatewords:20 }}
+        </p>
+
+        <p
+          style="
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            font-size: 0.9em;
+          "
+        >
+          <strong>📋 Recommended Action:</strong> {{
+          alert.recommendation|truncatewords:25 }}
+        </p>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+          "
+        >
+          <small style="color: #666">
+            <strong>Risk Probability:</strong> {{ alert.probability_score }}%
+          </small>
+          {% if not alert.notification_sent %}
+          <span
+            style="
+              background: #fff3cd;
+              color: #856404;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-size: 0.85em;
+            "
+          >
+            ℹ️ Notification pending
+          </span>
+          {% else %}
+          <span
+            style="
+              background: #d4edda;
+              color: #155724;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-size: 0.85em;
+            "
+          >
+            ✓ Notified
+          </span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="alert-container">
+    <div
+      style="
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+        padding: 12px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      "
+    >
+      <span style="font-size: 1.2em">✓</span>
+      <div>
+        <strong>No Recent Risk Alerts</strong>
+        <p style="margin: 0; font-size: 0.9em">
+          Your farms are looking good! Weather and environmental conditions are
+          favorable.
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .risk-alert-card {
+    transition: box-shadow 0.2s ease;
+  }
+  .risk-alert-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+</style>

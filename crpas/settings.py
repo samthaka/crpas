@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -134,6 +135,14 @@ DATABASES = {
         'PORT': os.getenv("DB_PORT", "5432"),
     }
 }
+
+# Use SQLite in-memory database for tests
+# This avoids permission issues and speeds up test execution
+if 'test' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+    }
 
 
 # Password validation

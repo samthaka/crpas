@@ -45,12 +45,25 @@ class AppConfig(AppConfig):
                 replace_existing=True,
             )
             
+            # Schedule the periodic weather fetch & risk analysis task
+            # Runs every 6 hours at: 12:00 AM, 6:00 AM, 12:00 PM, 6:00 PM UTC
+            from .tasks import periodic_fetch_and_analyze_weather
+            
+            scheduler.add_job(
+                periodic_fetch_and_analyze_weather,
+                trigger=CronTrigger(hour='*/6', minute=0),
+                id='periodic_weather_fetch',
+                name='Periodic weather data fetch & risk analysis',
+                replace_existing=True,
+            )
+            
             # Start the scheduler if not already running
             if not scheduler.running:
                 scheduler.start()
                 logger.info("✓ APScheduler started successfully")
-                logger.info("  Task: send_daily_advisories")
-                logger.info("  Schedule: Daily at 6 AM UTC (9 AM GMT+3 Nairobi time)")
+                logger.info("  Tasks scheduled:")
+                logger.info("    1. send_daily_advisories - Daily at 6 AM UTC (9 AM GMT+3 Nairobi time)")
+                logger.info("    2. periodic_weather_fetch - Every 6 hours at 12:00 AM, 6:00 AM, 12:00 PM, 6:00 PM UTC")
                 logger.info("  Job store: DjangoJobStore (Django database)")
             else:
                 logger.info("APScheduler already running")

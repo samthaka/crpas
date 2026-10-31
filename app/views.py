@@ -26,9 +26,20 @@ def dashboard(request):
     farmer = Farmer.objects.filter(email=request.user.email).first()
     farms = Farm.objects.filter(farmer=farmer) if farmer else []
     
+    # Get recent risk alerts for the farmer's farms (last 7 days)
+    risk_alerts = []
+    recent_date = timezone.now() - timedelta(days=7)
+    if farms:
+        from app.models import RiskAlert
+        risk_alerts = RiskAlert.objects.filter(
+            farm__in=farms,
+            created_at__gte=recent_date
+        ).order_by('-created_at').select_related('farm')[:10]
+    
     return render(request, 'dashboard/dashboard.html', {
         'farmer': farmer,
         'farms': farms,
+        'risk_alerts': risk_alerts,
     })
 
 def index_redirect(request):
@@ -453,12 +464,12 @@ def verify_phone(request):
                 request.session.pop('verification_sms_sent', None)
                 
                 if is_phone_signup:
-                    # This is a signup flow - redirect to farmer registration
+                    # This is a signup flow - redirect to password setup
                     request.session.pop('is_phone_signup', None)
                     request.session['phone_signup'] = True  # Flag for farmer registration to prefill phone
-                    logger.info(f"✓ Phone signup successful for {user.phone}, redirecting to farmer registration")
-                    messages.success(request, "Welcome! Let's set up your farm profile.")
-                    return redirect('farmer_registration')
+                    logger.info(f"✓ Phone verified for {user.phone}, redirecting to password setup")
+                    messages.success(request, "Phone verified! Now let's set a password.")
+                    return redirect('phone_signup_password')
                 else:
                     # This is a login flow
                     request.session.pop('auth_phone', None)
@@ -1030,7 +1041,7 @@ def delete_chat_view(request, thread_id):
     Handles both AJAX and regular POST requests.
     """
     try:
-        farmer = Farmer.objects.filter(phone=request.user.email).first() or Farmer.objects.first()
+        farmer = Farmer.objects.filter(email=request.user.email).first()
     except Farmer.DoesNotExist:
         messages.error(request, "Please complete your farmer registration first.")
         return redirect('farmer_registration')
