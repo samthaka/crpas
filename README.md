@@ -81,44 +81,6 @@ This application is built using the following technologies:
 - Gmail SMTP for email delivery
 - External SMS gateway via HTTP JSON request
 
-## Project structure
-
-```text
-CRPAS/
-├── app/                     # Core Django application
-│   ├── management/         # Custom Django admin commands
-│   ├── migrations/         # Database migrations
-│   ├── static/             # Frontend CSS/JS assets
-│   ├── templates/          # Django HTML templates
-│   ├── admin.py            # Admin configuration
-│   ├── adapters.py         # Social login customization
-│   ├── backends.py         # Authentication backend
-│   ├── email_service.py    # Email sending logic
-│   ├── forms.py            # User and farm forms
-│   ├── middleware.py       # Email verification middleware
-│   ├── models.py           # Database schema
-│   ├── notification_utils.py
-│   ├── risk_analysis.py    # Risk detection logic
-│   ├── sms_service.py      # SMS logic
-│   ├── tasks.py            # Scheduled advisories
-│   ├── urls.py            # Application routes
-│   ├── utils.py           # Geocoding, climate APIs, advisory generation
-│   └── views.py           # Request handling and business logic
-├── crpas/                  # Project configuration
-├── county-data/            # Kenya admin geography data
-├── static/                 # Global static assets
-├── Dockerfile              # Container definition
-├── docker-compose.yml      # Local multi-container setup
-├── manage.py               # Django entry point
-├── requirements.txt        # Python dependencies
-├── schema.dot             # Schema diagram
-├── data.json              # Example data / fixtures
-├── db.sqlite3             # Local SQLite database
-├── .env.example           # Sample environment file
-├── README.md              # Project documentation
-└── SYSTEM_DESCRIPTION.txt # Plain-text project overview
-```
-
 ## Setup and run
 
 ### Option 1: Local Python environment
